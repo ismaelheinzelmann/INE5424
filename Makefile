@@ -1,6 +1,8 @@
 # Compiler and Flags
 CXX := g++
 CXXFLAGS := -std=c++11 -Wall -Wextra -Werror
+DEBUG_FLAGS := -g
+CXXFLAGS_DEBUG := $(CXXFLAGS) $(DEBUG_FLAGS)
 
 # Directories
 CLIENT_DIR := client
@@ -45,6 +47,10 @@ all: directories $(TARGET)
 # Build target
 $(TARGET): $(CLIENT_OBJECTS) $(LIB_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(CLIENT_OBJECTS) $(LIB_OBJECTS) -o $(TARGET)
+
+# Build target with debugging information
+debug: CXXFLAGS := $(CXXFLAGS_DEBUG)
+debug: directories $(TARGET)
 
 # Build object files from library source
 $(LIB_OBJ_DIR)/%.o: $(LIB_CPP_DIR)/%.cpp

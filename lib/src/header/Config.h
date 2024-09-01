@@ -7,8 +7,8 @@
 
 #include <string>
 struct Config {
-  std::string ip;
-  int port;
   uint id;
+  uint port;
+  std::string ip;
 };
 #endif //CONFIG_H

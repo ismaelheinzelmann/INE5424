@@ -3,6 +3,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include<string>
 #define NODES_OPTION "nodes"
 
 std::string ConfigParser::cleanFile(const std::string& configFilePath){
@@ -65,7 +66,26 @@ std::vector<Config> ConfigParser::parseConfigurations(const std::string* nodesSt
 
 Config ConfigParser::parseConfiguration(const std::string& nodeString)
 {
-    //TODO: Parse node string to struct
-    std::cout<<nodeString<<std::endl;
-    return {};
+    if (nodeString.empty()) throw std::runtime_error("nodeString is empty");
+    int comma = 0, colon = 0;
+    size_t i = 0;
+    while (i < nodeString.length())
+    {
+        if (nodeString.at(i) == ':')
+        {
+            if (colon != 0) throw std::runtime_error("Error parsing configuration file, more information could be found at README.");
+            colon = i;
+        }
+        if (nodeString.at(i) == ',')
+        {
+            if (comma != 0) throw std::runtime_error("Error parsing configuration file, more information could be found at README.");
+            comma = i;
+        }
+        i++;
+    }
+    const int id = std::stoi(nodeString.substr(0, comma));
+    const int port = std::stoi(nodeString.substr(colon + 1, nodeString.length() - colon - 1));
+    if (id < 0 || port < 0) throw std::runtime_error("Error parsing configuration file, more information could be found at README.");
+    const std::string ip = nodeString.substr(comma + 1, colon - comma - 1);
+    return Config{static_cast<uint>(id),static_cast<uint>(port), ip};
 }
