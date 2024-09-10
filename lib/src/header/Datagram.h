@@ -1,10 +1,20 @@
 //
 // Created by ismael on 08/09/24.
 //
-#include <cstddef>
 #include <vector>
 #ifndef DATAGRAM_H
 #define DATAGRAM_H
+// Datagram class for socket comunication.
+// The datagram is the unit of data that is sent through the socket.
+// The datagram is composed by the following fields:
+// - Source port: The port of the sender.
+// - Destination port: The port of the receiver.
+// - Version: The current datagram of the message.
+// - Datagram total: How many datagrams compose the message.
+// - Data length: Length of the current datagram.
+// - Acknowledgement: If acknowledge, the first byte of data is the aknowledge number (which datagram is confirming), the rest can be discarded.
+// - Checksum: Apply constant mask for the field at the checksum generation, using CRC32.
+// - Data: The data of the datagram.
 class Datagram {
     public:
       	Datagram();
@@ -14,8 +24,8 @@ class Datagram {
       	void setDatagramTotal(unsigned int datagramTotal);
       	void setDataLength(unsigned int dataLength);
       	void setAcknowledgement(bool acknowledgement);
-      	void setChecksum(std::byte checksum[16]);
-    	void setData(std::vector<std::byte> data);
+      	void setChecksum(unsigned int checksum);
+    	void setData(std::vector<unsigned char> data);
 
         unsigned int getSourcePort();
         unsigned int getDestinationPort();
@@ -23,10 +33,8 @@ class Datagram {
         unsigned int getDatagramTotal();
         unsigned int getDataLength();
         bool getAcknowledgement();
-        std::byte* getChecksum();
-        std::vector<std::byte> getData();
-        std::vector<std::byte> serialize();
-        void deserialize(std::vector<std::byte> serializedDatagram);
+        unsigned int getChecksum();
+        std::vector<unsigned char> getData();
 
     private:
         unsigned int sourcePort;
@@ -35,8 +43,8 @@ class Datagram {
         unsigned int datagramTotal; // How many datagrams compose the message
         unsigned int dataLength; // Length of the current datagram
         bool acknowledge; // If acknowledge, the first byte of data is the aknowledge number (which datagram is confirming), the rest can be discarded.
-        std::byte checksum[16]; // Apply constant mask for the field at the checksum generation, using MD5
-        std::vector<std::byte> data;
+        unsigned int checksum; // Apply constant mask for the field at the checksum generation, using CRC32.
+        std::vector<unsigned char> data;
 };
 
 #endif //DATAGRAM_H
