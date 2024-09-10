@@ -1,7 +1,7 @@
-# INE5424
+## INE5424
 Socket reliable message library for INE5424 course at UFSC.
 
-# Project Structure
+### Project Structure
 
 #### The project is organized in three main folders
 - client: The example client for the library test
@@ -23,3 +23,25 @@ Socket reliable message library for INE5424 course at UFSC.
 - data: Directory containing non-source code aspects of the project. This might include graphics and markup files.
 
 - tools: Directory containing development utilities, such as build and refactoring scripts
+
+#### Library Structure
+
+#### Compiling and running
+
+For compiling the library and compile the client, you can use the following commands:
+
+```bash
+make
+```
+
+For cleaning the project, you can use the following command:
+
+```bash
+make .clean
+```
+
+For building in debug mode, you can use the following command:
+
+```bash
+make .debug
+```

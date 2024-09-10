@@ -3,7 +3,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
-#include<string>
+#include <string>
 #define NODES_OPTION "nodes"
 
 std::string ConfigParser::cleanFile(const std::string& configFilePath){
@@ -67,8 +67,7 @@ std::vector<Config> ConfigParser::parseConfigurations(const std::string* nodesSt
 Config ConfigParser::parseConfiguration(const std::string& nodeString)
 {
     if (nodeString.empty()) throw std::runtime_error("nodeString is empty");
-    int comma = 0, colon = 0;
-    size_t i = 0;
+    size_t comma = 0, colon = 0, i = 0;
     while (i < nodeString.length())
     {
         if (nodeString.at(i) == ':')

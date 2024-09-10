@@ -42,15 +42,15 @@ CLIENT_OBJECTS := $(patsubst $(CLIENT_CPP_DIR)/%.cpp,$(CLIENT_OBJ_DIR)/%.o,$(CLI
 TARGET := $(CLIENT_BIN_DIR)/client
 
 # Default target
-all: directories $(TARGET)
+all: .directories $(TARGET)
 
 # Build target
 $(TARGET): $(CLIENT_OBJECTS) $(LIB_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(CLIENT_OBJECTS) $(LIB_OBJECTS) -o $(TARGET)
 
 # Build target with debugging information
-debug: CXXFLAGS := $(CXXFLAGS_DEBUG)
-debug: directories $(TARGET)
+.debug: CXXFLAGS := $(CXXFLAGS_DEBUG)
+.debug: .directories $(TARGET)
 
 # Build object files from library source
 $(LIB_OBJ_DIR)/%.o: $(LIB_CPP_DIR)/%.cpp
@@ -63,9 +63,9 @@ $(CLIENT_OBJ_DIR)/%.o: $(CLIENT_CPP_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -I$(CLIENT_HEADER_DIR) -c $< -o $@
 
 # Create directories
-directories:
+.directories:
 	mkdir -p $(CLIENT_OBJ_DIR) $(CLIENT_BIN_DIR) $(LIB_OBJ_DIR)
 
 # Clean target
-clean:
+.clean:
 	rm -rf $(CLIENT_OBJ_DIR) $(CLIENT_BIN_DIR) $(LIB_OBJ_DIR) $(TARGET)
