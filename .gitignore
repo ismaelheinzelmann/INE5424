@@ -34,3 +34,4 @@
 /client/build/obj/*
 /client/build/bin/*
 /lib/build/obj/*
+/.idea

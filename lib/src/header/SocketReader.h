@@ -1,6 +1,3 @@
-//
-// Created by ismael on 10/09/24.
-//
 #include "Datagram.h"
 #include <sys/socket.h>
 #include <netinet/in.h>

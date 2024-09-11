@@ -1,7 +1,3 @@
-//
-// Created by ismael on 10/09/24.
-//
-
 #include "../header/Protocol.h"
 #include "../header/CRC32.h"
 

@@ -1,6 +1,3 @@
-//
-// Created by ismael on 10/09/24.
-//
 #include <array>
 
 #include "../header/CRC32.h"

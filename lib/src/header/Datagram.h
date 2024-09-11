@@ -1,6 +1,3 @@
-//
-// Created by ismael on 08/09/24.
-//
 #include <vector>
 #ifndef DATAGRAM_H
 #define DATAGRAM_H
