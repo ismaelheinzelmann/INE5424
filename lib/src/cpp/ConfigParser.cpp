@@ -2,8 +2,10 @@
 #include <fstream>
 #include <iostream>
 #include <map>
-#include <vector>
 #include <string>
+#include <sys/types.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #define NODES_OPTION "nodes"
 
 std::string ConfigParser::cleanFile(const std::string& configFilePath){
@@ -11,7 +13,6 @@ std::string ConfigParser::cleanFile(const std::string& configFilePath){
     if (cf.fail()){
         throw std::runtime_error("Config file could not be opened.");
     }
-    auto configs = std::map<std::string, Config>();
     std::string line;
     std::string file;
     while (std::getline(cf, line)){
@@ -25,7 +26,7 @@ std::string ConfigParser::cleanFile(const std::string& configFilePath){
     return file;
 }
 
-std::vector<Config> ConfigParser::parseNodes(const std::string& configFilePath)
+std::map<unsigned short, sockaddr_in> ConfigParser::parseNodes(const std::string& configFilePath)
 {
     const std::string cleanFileString = cleanFile(configFilePath);
     const std::string searchOption = NODES_OPTION;
@@ -34,8 +35,8 @@ std::vector<Config> ConfigParser::parseNodes(const std::string& configFilePath)
     return parseConfigurations(&cleanFileString, nodesStartPos + 1);
 }
 
-std::vector<Config> ConfigParser::parseConfigurations(const std::string* nodesString, const uint start){
-    auto configs = std::vector<Config>();
+std::map<unsigned short, sockaddr_in> ConfigParser::parseConfigurations(const std::string* nodesString, const uint start){
+    auto nodes = std::map<unsigned short, sockaddr_in>();
     uint deep = 0, nodesPos = start, currentNodeStart = 0;
     if (nodesString == nullptr) throw std::runtime_error("nodesString is null");
     if (nodesString->at(nodesPos) == '{'){
@@ -53,18 +54,17 @@ std::vector<Config> ConfigParser::parseConfigurations(const std::string* nodesSt
         {
             deep--;
             if (deep == 0) break;
-            Config config = parseConfiguration(nodesString->substr(currentNodeStart, nodesPos - currentNodeStart));
-            configs.push_back(config);
+            parseConfiguration(nodesString->substr(currentNodeStart, nodesPos - currentNodeStart), &nodes);
         }
         nodesPos++;
     }
     if (deep != 0)
         throw std::runtime_error("Error parsing configuration file, more information could be found at README.");
 
-    return configs;
+    return nodes;
 }
 
-Config ConfigParser::parseConfiguration(const std::string& nodeString)
+void ConfigParser::parseConfiguration(const std::string& nodeString, std::map<unsigned short, sockaddr_in> *nodes)
 {
     if (nodeString.empty()) throw std::runtime_error("nodeString is empty");
     size_t comma = 0, colon = 0, i = 0;
@@ -86,5 +86,9 @@ Config ConfigParser::parseConfiguration(const std::string& nodeString)
     const int port = std::stoi(nodeString.substr(colon + 1, nodeString.length() - colon - 1));
     if (id < 0 || port < 0) throw std::runtime_error("Error parsing configuration file, more information could be found at README.");
     const std::string ip = nodeString.substr(comma + 1, colon - comma - 1);
-    return Config{static_cast<uint>(id),static_cast<uint>(port), ip};
+    sockaddr_in node{};
+    node.sin_addr.s_addr = inet_addr(ip.c_str());
+    node.sin_port = htons(port);
+    node.sin_family = AF_INET;
+    nodes->insert({id, node});
 }

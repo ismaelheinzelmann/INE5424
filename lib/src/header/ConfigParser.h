@@ -1,19 +1,19 @@
 #ifndef CONFIGPARSER_H
 #define CONFIGPARSER_H
 
+#include <map>
 #include <string>
-#include "Config.h"
-#include <vector>
+#include <netinet/in.h>
 
 
 class ConfigParser {
 public:
     ConfigParser() = delete;
-    static std::vector<Config> parseNodes(const std::string& cleansedConfigString);
+    static std::map<unsigned short, sockaddr_in> parseNodes(const std::string& cleansedConfigString);
 private:
 	static std::string cleanFile(const std::string& configFilePath);
-    static std::vector<Config> parseConfigurations(const std::string* nodesString, uint start);
-    static Config parseConfiguration(const std::string& nodeString);
+    static std::map<unsigned short ,sockaddr_in> parseConfigurations(const std::string* nodesString, uint start);
+    static void parseConfiguration(const std::string& nodeString, std::map<unsigned short, sockaddr_in> *config);
 };
 
 #endif // CONFIGPARSER_H

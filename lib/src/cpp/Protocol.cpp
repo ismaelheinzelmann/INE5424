@@ -9,29 +9,31 @@ std::vector<unsigned char> Protocol::serialize(Datagram &datagram) {
     serializedDatagram.push_back(datagram.getVersion());
     serializedDatagram.push_back(datagram.getDatagramTotal());
     serializedDatagram.push_back(datagram.getDataLength());
-    serializedDatagram.push_back(datagram.getAcknowledgement());
-    serializedDatagram.push_back(computeChecksum(datagram));
-
+    serializedDatagram.push_back(datagram.getFlags());
+    for (unsigned short i = 0; i < 4; i++) {
+        serializedDatagram.push_back(0);
+    }
     for (unsigned int i = 0; i < datagram.getDataLength(); i++) {
         serializedDatagram.push_back(datagram.getData()[i]);
     }
+    serializedDatagram[12] = computeChecksum(datagram);
     return serializedDatagram;
 }
 
 // Deserializes data and returns a Datagram object.
 Datagram Protocol::deserialize(std::vector<unsigned char> &serializedDatagram) {
     Datagram datagram;
-    datagram.setSourcePort((unsigned int)serializedDatagram[0]);
-    datagram.setDestinationPort((unsigned int)serializedDatagram[1]);
-    datagram.setVersion((unsigned int)serializedDatagram[2]);
-    datagram.setDatagramTotal((unsigned int)serializedDatagram[3]);
-    datagram.setDataLength((unsigned int)serializedDatagram[4]);
-    datagram.setAcknowledgement((bool)serializedDatagram[5]);
-    datagram.setChecksum((unsigned int)serializedDatagram[6]);
+    datagram.setSourcePort((unsigned short)serializedDatagram[0]);
+    datagram.setDestinationPort((unsigned short)serializedDatagram[2]);
+    datagram.setVersion((unsigned short)serializedDatagram[4]);
+    datagram.setDatagramTotal((unsigned short)serializedDatagram[6]);
+    datagram.setDataLength((unsigned short)serializedDatagram[8]);
+    datagram.setFlags((unsigned short)serializedDatagram[10]);
+    datagram.setChecksum((unsigned int)serializedDatagram[12]);
 
     std::vector<unsigned char> data;
     for (unsigned int i = 0; i < datagram.getDataLength(); i++) {
-        data.push_back(serializedDatagram[i + 7]);
+        data.push_back(serializedDatagram[i + 16]);
     }
     datagram.setData(data);
     return datagram;

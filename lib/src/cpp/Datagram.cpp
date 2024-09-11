@@ -1,38 +1,38 @@
 
 #include "../header/Datagram.h"
-
+// MAX DATA SIZE = 16.384
 Datagram::Datagram() {
     this->sourcePort = 0;
     this->destinPort = 0;
     this->version = 0;
     this->datagramTotal = 0;
     this->dataLength = 0;
-    this->acknowledge = false;
+    this->flags = 0;
     this->checksum = 0;
 }
 
-void Datagram::setSourcePort(unsigned int port) {
+void Datagram::setSourcePort(unsigned short port) {
     this->sourcePort = port;
 }
 
-void Datagram::setDestinationPort(unsigned int port) {
+void Datagram::setDestinationPort(unsigned short port) {
     this->destinPort = port;
 }
 
-void Datagram::setVersion(unsigned int version) {
+void Datagram::setVersion(unsigned short version) {
     this->version = version;
 }
 
-void Datagram::setDatagramTotal(unsigned int datagramTotal) {
+void Datagram::setDatagramTotal(unsigned short datagramTotal) {
     this->datagramTotal = datagramTotal;
 }
 
-void Datagram::setDataLength(unsigned int dataLength) {
+void Datagram::setDataLength(unsigned short dataLength) {
     this->dataLength = dataLength;
 }
 
-void Datagram::setAcknowledgement(bool acknowledgement) {
-    this->acknowledge = acknowledgement;
+void Datagram::setFlags(unsigned short flags) {
+    this->flags = flags;
 }
 
 void Datagram::setChecksum(unsigned int checksum) {
@@ -43,28 +43,28 @@ void Datagram::setData(std::vector<unsigned char> data) {
     this->data = data;
 }
 
-unsigned int Datagram::getSourcePort() {
+unsigned short Datagram::getSourcePort() {
     return this->sourcePort;
 }
 
-unsigned int Datagram::getDestinationPort() {
+unsigned short Datagram::getDestinationPort() {
     return this->destinPort;
 }
 
-unsigned int Datagram::getVersion() {
+unsigned short Datagram::getVersion() {
     return this->version;
 }
 
-unsigned int Datagram::getDatagramTotal() {
+unsigned short Datagram::getDatagramTotal() {
     return this->datagramTotal;
 }
 
-unsigned int Datagram::getDataLength() {
+unsigned short Datagram::getDataLength() {
     return this->dataLength;
 }
 
-bool Datagram::getAcknowledgement() {
-    return this->acknowledge;
+unsigned short Datagram::getFlags() {
+    return this->flags;
 }
 
 unsigned int Datagram::getChecksum() {
@@ -73,4 +73,30 @@ unsigned int Datagram::getChecksum() {
 
 std::vector<unsigned char> Datagram::getData() {
     return this->data;
+}
+
+bool Datagram::isBitSet(unsigned short value, int bitPosition) {
+    short bitmask = 1 << bitPosition;
+    return (value & bitmask) != 0;
+}
+
+unsigned short Datagram::setBit(unsigned short value, int bitPosition) {
+    short bitmask = 1 << bitPosition;
+    return value | bitmask;
+}
+
+bool Datagram::isACK(){
+    return this->isBitSet(this->getFlags(), 0);
+}
+
+bool Datagram::isFIRST() {
+     return this->isBitSet(this->getFlags(), 1);
+}
+
+void Datagram::setIsACK(){
+    this->setFlags(this->setBit(this->getFlags(), 0));
+}
+
+void Datagram::setIsFIRST(){
+    this->setFlags(this->setBit(this->getFlags(), 1));
 }
