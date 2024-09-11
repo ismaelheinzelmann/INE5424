@@ -35,10 +35,10 @@ class Datagram {
 
         // Flag based
       	bool isACK(); // First bit
-        bool isFIRST(); // Second bit
+        bool isSYN(); // Second bit
 
         void setIsACK();
-        void setIsFIRST();
+        void setIsSYN();
 
 		bool isBitSet(unsigned short value, int bitPosition);
 		unsigned short setBit(unsigned short value, int bitPosition);

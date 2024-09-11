@@ -89,7 +89,7 @@ bool Datagram::isACK(){
     return this->isBitSet(this->getFlags(), 0);
 }
 
-bool Datagram::isFIRST() {
+bool Datagram::isSYN() {
      return this->isBitSet(this->getFlags(), 1);
 }
 
@@ -97,6 +97,6 @@ void Datagram::setIsACK(){
     this->setFlags(this->setBit(this->getFlags(), 0));
 }
 
-void Datagram::setIsFIRST(){
+void Datagram::setIsSYN(){
     this->setFlags(this->setBit(this->getFlags(), 1));
 }

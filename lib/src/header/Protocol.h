@@ -5,10 +5,10 @@
 
 class Protocol {
     public:
-        std::vector<unsigned char> serialize(Datagram &datagram);
-        Datagram deserialize(std::vector<unsigned char> &serializedDatagram);
-        unsigned int computeChecksum(Datagram &datagram);
-        bool verifyChecksum(Datagram datagram);
+        static std::vector<unsigned char> serialize(Datagram *datagram);
+        static Datagram deserialize(std::vector<unsigned char> &serializedDatagram);
+        static unsigned int computeChecksum(std::vector<unsigned char> serializedDatagram);
+        static bool verifyChecksum(Datagram datagram);
 };
 
 
