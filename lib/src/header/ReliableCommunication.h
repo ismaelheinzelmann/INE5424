@@ -16,12 +16,15 @@ class ReliableCommunication {
     public:
         ReliableCommunication(std::string configFilePath, unsigned short nodeID);
         void send(unsigned short id, const std::vector<unsigned char>& data);
-//        std::vector<unsigned char> receive();
+        std::vector<unsigned char> receive();
     private:
         unsigned short id;
         std::map<unsigned short, sockaddr_in> configMap;
 
         static Datagram createFirstDatagram(unsigned short dataLength);
+
+        static Datagram createAckDatagram(unsigned short dataLength);
+
         static unsigned short calculateTotalDatagrams(unsigned int dataLength);
 };
 
