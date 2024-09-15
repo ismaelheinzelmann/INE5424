@@ -57,7 +57,7 @@ $(LIB_OBJ_DIR)/%.o: $(LIB_CPP_DIR)/%.cpp
 	@mkdir -p $(LIB_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -I$(LIB_HEADER_DIR) -c $< -o $@
 
-# Build object files from client source
+# Build object files from send source
 $(CLIENT_OBJ_DIR)/%.o: $(CLIENT_CPP_DIR)/%.cpp
 	@mkdir -p $(CLIENT_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -I$(CLIENT_HEADER_DIR) -c $< -o $@

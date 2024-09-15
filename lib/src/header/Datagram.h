@@ -1,3 +1,4 @@
+#pragma once
 #include <vector>
 #ifndef DATAGRAM_H
 #define DATAGRAM_H
@@ -36,9 +37,11 @@ class Datagram {
         // Flag based
       	bool isACK(); // First bit
         bool isSYN(); // Second bit
+		bool isNACK();// Third bit
 
         void setIsACK();
         void setIsSYN();
+		void setIsNACK();
 
 		bool isBitSet(unsigned short value, int bitPosition);
 		unsigned short setBit(unsigned short value, int bitPosition);

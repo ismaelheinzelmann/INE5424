@@ -1,6 +1,5 @@
 
 #include "../header/Datagram.h"
-// MAX DATA SIZE = 16.384
 Datagram::Datagram() {
     this->sourcePort = 0;
     this->destinPort = 0;
@@ -93,10 +92,17 @@ bool Datagram::isSYN() {
      return this->isBitSet(this->getFlags(), 1);
 }
 
+bool Datagram::isNACK() {
+     return this->isBitSet(this->getFlags(), 2);
+}
+
 void Datagram::setIsACK(){
     this->setFlags(this->setBit(this->getFlags(), 0));
 }
 
 void Datagram::setIsSYN(){
     this->setFlags(this->setBit(this->getFlags(), 1));
+}
+void Datagram::setIsNACK(){
+	this->setFlags(this->setBit(this->getFlags(), 2));
 }
