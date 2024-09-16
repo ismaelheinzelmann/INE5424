@@ -1,15 +1,16 @@
 #include "../header/ReliableCommunication.h"
 #include "../header/ConfigParser.h"
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <stdexcept>
+#include "../header/Protocol.h"
 #include <cmath>
 #include <iostream>
 #include <mutex>
+#include <netinet/in.h>
+#include <stdexcept>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#include "../header/Protocol.h"
+#include <cstring>
 
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID) {
     this->configMap = ConfigParser::parseNodes(configFilePath);
@@ -26,11 +27,13 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
         close(socketInfo);
         throw std::runtime_error("Could not bind socket.");
     }
+    handler = new MessageHandler();
 }
 
 ReliableCommunication::~ReliableCommunication()
 {
     close(socketInfo);
+    delete handler;
 }
 
 
@@ -38,25 +41,36 @@ void ReliableCommunication::send(const unsigned short id, const std::vector<unsi
     if (this->configMap.find(id) == this->configMap.end()) {
         throw std::runtime_error("Invalid ID.");
     }
+    std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 
     Datagram datagram = createFirstDatagram(data.size());
     datagram.setDataLength(data.size());
+    datagram.setDatagramTotal(calculateTotalDatagrams(data.size()));
     datagram.setData(data);
+
 
     const std::vector<unsigned char> sendBuffer = Protocol::serialize(&datagram);
 
-    sockaddr_in address = this->configMap[id];
-    const ssize_t bytes = sendto(socketInfo, sendBuffer.data(), sendBuffer.size(), 0,
-                                 reinterpret_cast<struct sockaddr *>(&address), sizeof(address));
+    sockaddr_in destinAddr = this->configMap[id];
+    const ssize_t bytes = sendto(transientSocketFd.first, sendBuffer.data(), sendBuffer.size(), 0,
+                                 reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
+
+
     if (bytes < 0) {
         throw std::runtime_error("Could not send data.");
     }
-    // TODO: Implementar lógica pos SYN
+    sockaddr_in senderAddr{};
+    senderAddr.sin_family = AF_INET;
+    if (const bool received = Protocol::readDatagramSocket(datagram, transientSocketFd.first, senderAddr); !received) {
+        close(transientSocketFd.first);
+        throw std::runtime_error("Failed to read datagram.");
+    }
+
     // TODO: Revisar flags no sendto e afins, provavelmente nem precisaremos do flags no datagram
 }
 
 
-std::vector<unsigned char> ReliableCommunication::receive() {
+std::vector<unsigned char> ReliableCommunication::receive() const {
     Datagram datagram;
     sockaddr_in senderAddr{};
     senderAddr.sin_family = AF_INET;
@@ -66,6 +80,9 @@ std::vector<unsigned char> ReliableCommunication::receive() {
     }
     if (!verifyOrigin(senderAddr)) throw std::runtime_error("Invalid sender address.");
     // Extract data from the datagram
+
+    handler->handleMessage(&datagram, &senderAddr, this->socketInfo);
+    // TODO Este metodo deve ser listen, receive deve esperar o semaphoro e retornar a mensagem.
     const std::vector<unsigned char>& data = datagram.getData();
 
     // Return the data
@@ -110,7 +127,7 @@ unsigned short ReliableCommunication::calculateTotalDatagrams(unsigned int dataL
 }
 
 
-void ReliableCommunication::receiveAndPrint(std::mutex *lock) {
+void ReliableCommunication::receiveAndPrint(std::mutex *lock) const {
     while (true){
         auto message = receive();
         std::string messageString(message.begin(), message.end());lock->lock();
@@ -130,4 +147,39 @@ bool ReliableCommunication::verifyOrigin( sockaddr_in& senderAddr){
     // return false;
     senderAddr.sin_family = AF_INET;
     return true;
+}
+
+std::pair<int, sockaddr_in> ReliableCommunication::createUDPSocketAndGetPort() {
+    sockaddr_in addr{};
+    socklen_t addr_len = sizeof(addr);
+
+    // Create a UDP socket
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sockfd < 0) {
+        perror("socket");
+        throw std::runtime_error("Failed to create socket");
+    }
+
+    // Prepare sockaddr_in structure for a dummy bind
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(0); // Let the system choose an available port
+
+    // Bind the socket to get an available port (dummy bind)
+    if (bind(sockfd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0) {
+        perror("bind");
+        close(sockfd);
+        throw std::runtime_error("Failed to bind socket");
+    }
+
+    // Retrieve the assigned port
+    if (getsockname(sockfd, reinterpret_cast<struct sockaddr *>(&addr), &addr_len) < 0) {
+        perror("getsockname");
+        close(sockfd);
+        throw std::runtime_error("Failed to get socket name");
+    }
+
+    // Return the file descriptor and the address
+    return {sockfd, addr};
 }

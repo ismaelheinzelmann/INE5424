@@ -97,7 +97,8 @@ bool Protocol::readDatagramSocketTimeout(Datagram& datagramBuff, int socketfd, s
         // Error occurred in select()
         perror("select");
         return false;
-    } else if (select_result == 0) {
+    }
+    if (select_result == 0) {
         // Timeout occurred
         std::cerr << "Timeout occurred\n";
         return false;

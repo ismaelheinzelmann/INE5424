@@ -1,13 +1,11 @@
-
-#include <vector>
-#include <string>
-#include <map>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <bits/std_mutex.h>
-#include <netinet/in.h>
+#pragma once
 #include "Datagram.h"
+#include <bits/std_mutex.h>
+#include <map>
+#include <netinet/in.h>
+#include <string>
+#include <vector>
+#include "MessageHandler.h"
 #ifndef RELIABLE_H
 #define RELIABLE_H
 
@@ -19,14 +17,16 @@ class ReliableCommunication {
         ~ReliableCommunication();
         void printNodes(std::mutex* lock) const;
         void send(unsigned short id, const std::vector<unsigned char>& data);
-        std::vector<unsigned char> receive();
-        void receiveAndPrint(std::mutex* lock);
-        static bool verifyOrigin(sockaddr_in& senderAddr);
+        std::vector<unsigned char> receive() const;
+        void receiveAndPrint(std::mutex* lock) const;
+        static bool verifyOrigin(sockaddr_in &senderAddr);
+        static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 
-    private:
+      private:
         unsigned short id;
         std::map<unsigned short, sockaddr_in> configMap;
         int socketInfo;
+        MessageHandler *handler;
 
         static Datagram createFirstDatagram(unsigned short dataLength);
 

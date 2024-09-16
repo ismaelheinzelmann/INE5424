@@ -37,14 +37,14 @@ class Datagram {
         // Flag based
       	bool isACK(); // First bit
         bool isSYN(); // Second bit
-		bool isNACK();// Third bit
+	bool isNACK();// Third bit
 
         void setIsACK();
         void setIsSYN();
-		void setIsNACK();
+	void setIsNACK();
 
-		bool isBitSet(unsigned short value, int bitPosition);
-		unsigned short setBit(unsigned short value, int bitPosition);
+	bool isBitSet(unsigned short value, int bitPosition);
+	unsigned short setBit(unsigned short value, int bitPosition);
 
     private:
         unsigned short sourcePort;
