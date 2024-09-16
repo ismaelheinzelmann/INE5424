@@ -14,15 +14,11 @@ unsigned short TypeUtils::buffToUnsignedShort(const std::vector<unsigned char> &
 	if (i + 1 >= buffer.size()) {
 		throw std::out_of_range("Buffer overflow: not enough data to read an unsigned short.");
 	}
+	unsigned char buff[2] = {buffer.at(i), buffer.at(i + 1)};
 
-	unsigned short value;
-	std::memcpy(&value, &buffer[i], sizeof(value));
-
-	// value = (value >> 8) | (value << 8);
-
-	return value;
+	// Read two bytes from the buffer
+	return (buff[0] << 8) | buff[1];
 }
-
 unsigned int TypeUtils::buffToUnsignedInt(const std::vector<unsigned char> &buffer, unsigned int i) {
 	// Ensure the buffer has enough data
 	if (i + 3 >= buffer.size()) {

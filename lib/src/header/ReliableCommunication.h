@@ -17,21 +17,18 @@ class ReliableCommunication {
         ~ReliableCommunication();
         void printNodes(std::mutex* lock) const;
         void send(unsigned short id, const std::vector<unsigned char>& data);
-        std::vector<unsigned char> receive() const;
-        void receiveAndPrint(std::mutex* lock) const;
-        static bool verifyOrigin(sockaddr_in &senderAddr);
+        std::vector<unsigned char> receive();
+        void receiveAndPrint(std::mutex* lock);
         static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 
-      private:
+    private:
         unsigned short id;
         std::map<unsigned short, sockaddr_in> configMap;
         int socketInfo;
         MessageHandler *handler;
-
+        bool verifyOrigin(sockaddr_in &senderAddr);
         static Datagram createFirstDatagram(unsigned short dataLength);
-
         static Datagram createAckDatagram(unsigned short dataLength);
-
         static unsigned short calculateTotalDatagrams(unsigned int dataLength);
 };
 

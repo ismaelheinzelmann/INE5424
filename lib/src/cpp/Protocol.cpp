@@ -20,28 +20,27 @@
 std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
     // TODO Refatorar
     std::vector<unsigned char> serializedDatagram;
-    unsigned char buff[2] = {0, 0};
 
     unsigned short temp = datagram->getSourcePort();
-    buff[0] = static_cast<unsigned char>(temp);
-    for (unsigned char i : buff) serializedDatagram.push_back(i);
+    serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
+    serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
 
     temp =  datagram->getDestinationPort();
-    buff[0] = static_cast<unsigned char>(temp);
-    for (unsigned char i : buff) serializedDatagram.push_back(i);
+    serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
+    serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
     temp = datagram->getVersion();
-    buff[0] = static_cast<unsigned char>(temp);
-    for (unsigned char i : buff) serializedDatagram.push_back(i);
+    serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
+    serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
 
     temp = datagram->getDatagramTotal();
-    buff[0] = static_cast<unsigned char>(temp);
-    for (unsigned char i : buff) serializedDatagram.push_back(i);
+    serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
+    serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
     temp = datagram->getDataLength();
-    buff[0] = static_cast<unsigned char>(temp);
-    for (unsigned char i : buff) serializedDatagram.push_back(i);
+    serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
+    serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
     temp = datagram->getFlags();
-    buff[0] = static_cast<unsigned char>(temp);
-    for (unsigned char i : buff) serializedDatagram.push_back(i);
+    serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
+    serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
 
     for (unsigned short i = 0; i < 4; i++) serializedDatagram.push_back(0);
     for (unsigned int i = 0; i < datagram->getDataLength(); i++) serializedDatagram.push_back(datagram->getData()[i]);
@@ -132,7 +131,7 @@ bool Protocol::readDatagramSocketTimeout(Datagram& datagramBuff, int socketfd, s
 
 bool Protocol::readDatagramSocket(Datagram& datagramBuff, int socketfd, sockaddr_in& senderAddr){
     auto bytesBuffer = std::vector<unsigned char>(1040);
-    std::memset(&senderAddr, 0, sizeof(senderAddr));
+    // std::memset(&senderAddr, 0, sizeof(senderAddr));
     senderAddr.sin_family = AF_INET;
     socklen_t senderAddrLen = sizeof(senderAddr);
     ssize_t bytes_received = recvfrom(socketfd, bytesBuffer.data(), bytesBuffer.size(), 0, reinterpret_cast<struct sockaddr*>(&senderAddr), &senderAddrLen);

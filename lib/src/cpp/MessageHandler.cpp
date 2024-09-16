@@ -10,7 +10,7 @@ MessageHandler::MessageHandler(){
 }
 
 void MessageHandler::handleMessage(Datagram *datagram, sockaddr_in *from, int socketfd) {
-    if (datagram->getVersion() == 0){
+    if (datagram->isSYN()) {
         handleFirstMessage(datagram, from, socketfd);
 //    } else {
 //        handleDataMessage(datagram, from, socketfd);
@@ -23,6 +23,7 @@ void MessageHandler::handleMessage(Datagram *datagram, sockaddr_in *from, int so
 // Return ack for the zero datagram
 void MessageHandler::handleFirstMessage(Datagram *datagram, sockaddr_in *from, int socketfd){
     Message message = Message(datagram->getDataLength(), datagram->getDatagramTotal());
+    from->sin_port = datagram->getSourcePort();
     auto identifier = getIdentifier(from);
     std::lock_guard<std::shared_mutex> lock(mutex);
     messages[identifier] = &message;

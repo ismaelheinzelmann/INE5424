@@ -47,12 +47,12 @@ void ReliableCommunication::send(const unsigned short id, const std::vector<unsi
     datagram.setDataLength(data.size());
     datagram.setDatagramTotal(calculateTotalDatagrams(data.size()));
     datagram.setData(data);
-
+    datagram.setSourcePort(transientSocketFd.second.sin_port);
 
     const std::vector<unsigned char> sendBuffer = Protocol::serialize(&datagram);
 
     sockaddr_in destinAddr = this->configMap[id];
-    const ssize_t bytes = sendto(transientSocketFd.first, sendBuffer.data(), sendBuffer.size(), 0,
+    const ssize_t bytes = sendto(this->socketInfo, sendBuffer.data(), sendBuffer.size(), 0,
                                  reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
 
 
@@ -70,7 +70,7 @@ void ReliableCommunication::send(const unsigned short id, const std::vector<unsi
 }
 
 
-std::vector<unsigned char> ReliableCommunication::receive() const {
+std::vector<unsigned char> ReliableCommunication::receive() {
     Datagram datagram;
     sockaddr_in senderAddr{};
     senderAddr.sin_family = AF_INET;
@@ -78,7 +78,9 @@ std::vector<unsigned char> ReliableCommunication::receive() const {
         close(socketInfo);
         throw std::runtime_error("Failed to read datagram.");
     }
-    if (!verifyOrigin(senderAddr)) throw std::runtime_error("Invalid sender address.");
+    if (datagram.getVersion() == 0 && datagram.isACK() && datagram.isSYN() && !verifyOrigin(senderAddr)) {
+        throw std::runtime_error("Invalid sender address.");
+    }
     // Extract data from the datagram
 
     handler->handleMessage(&datagram, &senderAddr, this->socketInfo);
@@ -127,7 +129,7 @@ unsigned short ReliableCommunication::calculateTotalDatagrams(unsigned int dataL
 }
 
 
-void ReliableCommunication::receiveAndPrint(std::mutex *lock) const {
+void ReliableCommunication::receiveAndPrint(std::mutex *lock) {
     while (true){
         auto message = receive();
         std::string messageString(message.begin(), message.end());lock->lock();
@@ -138,15 +140,12 @@ void ReliableCommunication::receiveAndPrint(std::mutex *lock) const {
 }
 
 bool ReliableCommunication::verifyOrigin( sockaddr_in& senderAddr){
-    // TODO Verificar como validar não criação
-    // for (const auto & [_, nodeAddr]: this->configMap) {
-    //     if (senderAddr.sin_addr.s_addr == nodeAddr.sin_addr.s_addr && senderAddr.sin_port == nodeAddr.sin_port){
-    //         return true;
-    //     }
-    // }
-    // return false;
-    senderAddr.sin_family = AF_INET;
-    return true;
+    for (const auto & [_, nodeAddr]: this->configMap) {
+        if (senderAddr.sin_addr.s_addr == nodeAddr.sin_addr.s_addr && senderAddr.sin_port == nodeAddr.sin_port){
+            return true;
+        }
+    }
+    return false;
 }
 
 std::pair<int, sockaddr_in> ReliableCommunication::createUDPSocketAndGetPort() {
