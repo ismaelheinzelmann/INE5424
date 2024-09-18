@@ -11,20 +11,15 @@ Message::Message(unsigned short totalDataBytes, unsigned short totalDatagrams) {
 
 void Message::addData(std::vector<unsigned char> &data) {
     this->data.insert(this->data.end(), data.begin(), data.end());
+    incrementVersion();
+    lastUpdate = std::chrono::system_clock::now();
 }
 
-bool Message::verifyMessage(Datagram &datagram) {
-    unsigned short datagramVersion = datagram.getVersion();
-    if (datagramVersion == lastVersionReceived || datagramVersion == lastVersionReceived + 1) {
-        incrementVersion();
-        lastUpdate = std::chrono::system_clock::now();
-        // if (data.size() + datagram.getDataLength() == totalDataBytes) {
-        //     return true;
-        // }
-        return true;
-    }
+bool Message::verifyMessage(Datagram &datagram) const {
+    const unsigned short datagramVersion = datagram.getVersion();
 
-    return false;
+    return (datagramVersion == lastVersionReceived || datagramVersion == lastVersionReceived + 1) &&
+        data.size() + datagram.getDataLength() <= totalDataBytes;
 }
 
 void Message::incrementVersion() {
