@@ -12,9 +12,8 @@ MessageHandler::MessageHandler(){
 void MessageHandler::handleMessage(Datagram *datagram, sockaddr_in *from, int socketfd) {
     if (datagram->isSYN()) {
         handleFirstMessage(datagram, from, socketfd);
-//    } else {
-//        handleDataMessage(datagram, from, socketfd);
-//    }
+    } else {
+        handleDataMessage(datagram, from, socketfd);
     }
 }
 
@@ -28,6 +27,22 @@ void MessageHandler::handleFirstMessage(Datagram *datagram, sockaddr_in *from, i
     std::lock_guard<std::shared_mutex> lock(mutex);
     messages[identifier] = &message;
     sendDatagramACK(datagram, from, socketfd);
+}
+
+void MessageHandler::handleDataMessage(Datagram *datagram, sockaddr_in *from, int socketfd){
+    std::shared_lock<std::shared_mutex> lock(mutex);
+    Message *message = getMessage(from);
+    if (message == nullptr) {
+        throw std::runtime_error("Message not found");
+    }
+    auto data = datagram->getData();
+
+    if (message->verifyMessage(*datagram)) {
+        message->addData(data);
+        sendDatagramACK(datagram, from, socketfd);
+    } else {
+        sendDatagramNACK(datagram, from, socketfd);
+    }
 }
 
 
@@ -54,6 +69,19 @@ bool MessageHandler::sendDatagramACK(Datagram * datagram, sockaddr_in *from, int
     const ssize_t bytes = sendto(socketfd, serializedDatagramACK.data(), serializedDatagramACK.size(), 0,
                                  reinterpret_cast<struct sockaddr *>(from), sizeof(*from));
     if (bytes == static_cast<ssize_t>(serializedDatagramACK.size())) {
+        return true;
+    }
+    return false;
+}
+
+bool MessageHandler::sendDatagramNACK(Datagram * datagram, sockaddr_in *from, int socketfd) {
+    auto datagramNACK = Datagram();
+    datagramNACK.setVersion(datagram->getVersion());
+    datagramNACK.setIsNACK();
+    auto serializedDatagramNACK = Protocol::serialize(&datagramNACK);
+    const ssize_t bytes = sendto(socketfd, serializedDatagramNACK.data(), serializedDatagramNACK.size(), 0,
+                                 reinterpret_cast<struct sockaddr *>(from), sizeof(*from));
+    if (bytes == static_cast<ssize_t>(serializedDatagramNACK.size())) {
         return true;
     }
     return false;

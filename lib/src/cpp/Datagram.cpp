@@ -8,6 +8,7 @@ Datagram::Datagram() {
     this->dataLength = 0;
     this->flags = 0;
     this->checksum = 0;
+    this->data = std::vector<unsigned char>();
 }
 
 void Datagram::setSourcePort(unsigned short port) {

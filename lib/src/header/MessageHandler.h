@@ -14,7 +14,7 @@ class MessageHandler {
         ~MessageHandler() = default;
         void handleMessage(Datagram *datagram, sockaddr_in *from, int socketfd);
         void handleFirstMessage(Datagram *datagram, sockaddr_in *from, int socketfd);
-        // void handleDataMessage(Datagram *datagram, sockaddr_in *from, int socketfd);
+        void handleDataMessage(Datagram *datagram, sockaddr_in *from, int socketfd);
     private:
         std::map<std::pair<in_addr_t, in_port_t>, Message*> messages;
         std::shared_mutex mutex;
@@ -22,6 +22,7 @@ class MessageHandler {
         std::pair<in_addr_t, in_port_t> getIdentifier(sockaddr_in *from);
         Message* getMessage(sockaddr_in *from);
         bool sendDatagramACK(Datagram * datagram, sockaddr_in *from, int socketfd);
+        bool sendDatagramNACK(Datagram * datagram, sockaddr_in *from, int socketfd);
 
 };
 
