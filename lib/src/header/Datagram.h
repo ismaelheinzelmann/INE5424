@@ -32,16 +32,18 @@ class Datagram {
         unsigned short getDataLength();
 		unsigned short getFlags();
         unsigned int getChecksum();
-        std::vector<unsigned char> getData();
+                std::vector<unsigned char> *getData();
 
         // Flag based
       	bool isACK(); // First bit
         bool isSYN(); // Second bit
 	bool isNACK();// Third bit
+	bool isFIN();
 
         void setIsACK();
         void setIsSYN();
 	void setIsNACK();
+	void setIsFIN();
 
 	bool isBitSet(unsigned short value, int bitPosition);
 	unsigned short setBit(unsigned short value, int bitPosition);

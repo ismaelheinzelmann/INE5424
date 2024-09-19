@@ -12,6 +12,7 @@ MessageHandler::MessageHandler(){
 void MessageHandler::handleMessage(Datagram *datagram, sockaddr_in *from, int socketfd) {
     if (datagram->isSYN()) {
         handleFirstMessage(datagram, from, socketfd);
+    } else if ((datagram->isACK() && datagram->isSYN()) || datagram->isFIN()) {
     } else {
         handleDataMessage(datagram, from, socketfd);
     }
@@ -20,25 +21,26 @@ void MessageHandler::handleMessage(Datagram *datagram, sockaddr_in *from, int so
 
 // Create message in messages
 // Return ack for the zero datagram
+// TODO destrutor
 void MessageHandler::handleFirstMessage(Datagram *datagram, sockaddr_in *from, int socketfd){
-    Message message = Message(datagram->getDataLength(), datagram->getDatagramTotal());
+    auto *message = new Message(datagram->getDatagramTotal());
     from->sin_port = datagram->getSourcePort();
     auto identifier = getIdentifier(from);
-    std::lock_guard<std::shared_mutex> lock(mutex);
-    messages[identifier] = &message;
+    std::lock_guard lock(mutex);
+    messages[identifier] = message;
     sendDatagramACK(datagram, from, socketfd);
 }
 
 void MessageHandler::handleDataMessage(Datagram *datagram, sockaddr_in *from, int socketfd){
-    std::shared_lock<std::shared_mutex> lock(mutex);
+    from->sin_port = datagram->getSourcePort();
+    std::shared_lock lock(mutex);
     Message *message = getMessage(from);
     if (message == nullptr) {
         throw std::runtime_error("Message not found");
     }
-    auto data = datagram->getData();
 
     if (message->verifyMessage(*datagram)) {
-        message->addData(data);
+        message->addData(datagram->getData());
         sendDatagramACK(datagram, from, socketfd);
     } else {
         sendDatagramNACK(datagram, from, socketfd);

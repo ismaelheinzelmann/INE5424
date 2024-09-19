@@ -15,8 +15,19 @@ class ReliableCommunication {
     public:
         ReliableCommunication(std::string configFilePath, unsigned short nodeID);
         ~ReliableCommunication();
-        void printNodes(std::mutex* lock) const;
-        void send(unsigned short id, const std::vector<unsigned char>& data);
+        void printNodes(std::mutex *lock) const;
+        bool send(unsigned short id, const std::vector<unsigned char> &data);
+        bool ackAttempts(int transientSocketfd, sockaddr_in &destin,
+                         std::vector<unsigned char> &serializedData) const;
+        bool dataAttempts(int transientSocketfd, sockaddr_in &destin,
+                          std::vector<unsigned char> &serializedData) const;
+        bool dataAttempt(int transientSocketfd, sockaddr_in &destin,
+                         std::vector<unsigned char> &serializedData) const;
+        bool ackAttempt(int transientSocketfd, sockaddr_in &destin,
+                        std::vector<unsigned char> &serializedData) const;
+        bool sendAttempt(int socketfd, sockaddr_in &destin,
+                         std::vector<unsigned char> &serializedData,
+                         Datagram &datagram, int retryMS) const;
         std::vector<unsigned char> receive();
         void receiveAndPrint(std::mutex* lock);
         static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();

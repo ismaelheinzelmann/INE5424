@@ -67,12 +67,10 @@ unsigned short Datagram::getFlags() {
     return this->flags;
 }
 
-unsigned int Datagram::getChecksum() {
-    return this->checksum;
-}
+unsigned int Datagram::getChecksum() { return this->checksum; }
 
-std::vector<unsigned char> Datagram::getData() {
-    return this->data;
+std::vector<unsigned char> *Datagram::getData() {
+    return &this->data;
 }
 
 bool Datagram::isBitSet(unsigned short value, int bitPosition) {
@@ -97,6 +95,10 @@ bool Datagram::isNACK() {
      return this->isBitSet(this->getFlags(), 2);
 }
 
+bool Datagram::isFIN() {
+    return this->isBitSet(this->getFlags(), 3);
+}
+
 void Datagram::setIsACK(){
     this->setFlags(this->setBit(this->getFlags(), 0));
 }
@@ -107,3 +109,8 @@ void Datagram::setIsSYN(){
 void Datagram::setIsNACK(){
 	this->setFlags(this->setBit(this->getFlags(), 2));
 }
+void Datagram::setIsFIN(){
+	this->setFlags(this->setBit(this->getFlags(), 3));
+}
+
+

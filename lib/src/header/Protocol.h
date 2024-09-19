@@ -13,7 +13,10 @@ class Protocol {
         static Datagram deserialize(std::vector<unsigned char> &serializedDatagram);
         static unsigned int computeChecksum(std::vector<unsigned char> serializedDatagram);
         static bool verifyChecksum(Datagram datagram);
-        static bool readDatagramSocketTimeout(Datagram& datagramBuff, int socketfd, sockaddr_in& senderAddr);
+        static bool readDatagramSocketTimeout(Datagram &datagramBuff,
+                                              int socketfd,
+                                              sockaddr_in &senderAddr,
+                                              int timeoutMS);
         static bool readDatagramSocket(Datagram& datagramBuff, int socketfd, sockaddr_in& senderAddr);
     private:
         static void bufferToDatagram(Datagram& datagramBuff, const std::vector<unsigned char>& bytesBuffer);

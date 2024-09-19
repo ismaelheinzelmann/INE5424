@@ -1,6 +1,8 @@
 #include "../header/ReliableCommunication.h"
 #include "../header/ConfigParser.h"
 #include "../header/Protocol.h"
+
+#include <TypeUtils.h>
 #include <cmath>
 #include <iostream>
 #include <mutex>
@@ -11,6 +13,11 @@
 #include <unistd.h>
 
 #include <cstring>
+#define RETRY_ACK_ATTEMPT 4
+#define RETRY_ACK_TIMEOUT_USEC 250000
+
+#define RETRY_DATA_ATTEMPT 8
+#define RETRY_DATA_TIMEOUT_USEC 250000
 
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID) {
     this->configMap = ConfigParser::parseNodes(configFilePath);
@@ -30,45 +37,112 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
     handler = new MessageHandler();
 }
 
-ReliableCommunication::~ReliableCommunication()
-{
-    close(socketInfo);
-    delete handler;
+ReliableCommunication::~ReliableCommunication() {
+  close(socketInfo);
+  delete handler;
 }
 
-
-void ReliableCommunication::send(const unsigned short id, const std::vector<unsigned char> &data) {
+bool ReliableCommunication::send(const unsigned short id,
+                                 const std::vector<unsigned char> &data) {
     if (this->configMap.find(id) == this->configMap.end()) {
         throw std::runtime_error("Invalid ID.");
     }
     std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 
     Datagram datagram = createFirstDatagram(data.size());
-    datagram.setDataLength(data.size());
-    datagram.setDatagramTotal(calculateTotalDatagrams(data.size()));
-    datagram.setData(data);
+    // datagram.setDataLength(data.size());
+    unsigned short totalDatagrams = calculateTotalDatagrams(data.size());
+    datagram.setDatagramTotal(calculateTotalDatagrams(totalDatagrams));
+    // datagram.setData(data);
     datagram.setSourcePort(transientSocketFd.second.sin_port);
-
-    const std::vector<unsigned char> sendBuffer = Protocol::serialize(&datagram);
-
+    std::vector<unsigned char> sendBuffer = Protocol::serialize(&datagram);
     sockaddr_in destinAddr = this->configMap[id];
-    const ssize_t bytes = sendto(this->socketInfo, sendBuffer.data(), sendBuffer.size(), 0,
-                                 reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
+    bool accepted = ackAttempts(transientSocketFd.first, destinAddr, sendBuffer);
+    if (!accepted) {
+        return false;
+    }
+    // Verify if its faster to pre compute serialization
+    for (unsigned short i = 0; i < totalDatagrams; i++) {
+        auto versionDatagram = Datagram();
+        versionDatagram.setSourcePort(transientSocketFd.second.sin_port);
+        versionDatagram.setVersion(i);
+        versionDatagram.setDatagramTotal(totalDatagrams);
+        for (unsigned short j = 0; j < 1024; j++) {
+            const unsigned int index = i * 1024 + j;
+            if (index >= data.size()) break;
+            versionDatagram.getData()->push_back(data.at(index));
+        }
+        versionDatagram.setDataLength(versionDatagram.getData()->size());
+        auto serializedDatagram = Protocol::serialize(&versionDatagram);
+        unsigned char checksum[4] = {0, 0, 0, 0};
+        TypeUtils::uintToBytes(Protocol::computeChecksum(serializedDatagram), checksum);
+        for (unsigned short j = 0; j < 4; j++) serializedDatagram[12 + j] = checksum[j];
+        Datagram response;
+        for (int j = 0; j < RETRY_DATA_ATTEMPT; ++j) {
+            const ssize_t bytes = sendto(this->socketInfo, serializedDatagram.data(), serializedDatagram.size(), 0,
+                                                 reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
+            if (bytes < 0) {
+                return false;
+            }
+            sockaddr_in senderAddr{};
+            senderAddr.sin_family = AF_INET;
+            bool sent = Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, senderAddr, RETRY_DATA_TIMEOUT_USEC + RETRY_DATA_TIMEOUT_USEC * j);
+            // bool sent = Protocol::readDatagramSocket(response, transientSocketFd.first, senderAddr);
+            if (!sent) continue;
+            // if (!Protocol::verifyChecksum(response)) continue;
+            if (response.isACK()) {
+                break;
+            }
+        }
+    }
+    close(transientSocketFd.first);
+    return true;
+}
 
+bool ReliableCommunication::ackAttempts(int transientSocketfd, sockaddr_in &destin, std::vector<unsigned char> &serializedData) const {
+    Datagram response;
+    for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
+        const ssize_t bytes = sendto(this->socketInfo, serializedData.data(), serializedData.size(), 0,
+                                             reinterpret_cast<struct sockaddr *>(&destin), sizeof(destin));
+        if (bytes < 0) {
+            return false;
+        }
+        sockaddr_in senderAddr{};
+        senderAddr.sin_family = AF_INET;
+        bool sent = Protocol::readDatagramSocketTimeout(response, transientSocketfd, senderAddr, RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
+        if (!sent) continue;
+        // if (!Protocol::verifyChecksum(response)) continue;
+        // if (response.isACK()) return true;;
+        if (response.isACK() && response.isSYN()) {
+            std::cout<<"FIRST ACK"<< std::endl;
+            return true;
+        }
+    }
+    return false;
+}
 
+bool ReliableCommunication::dataAttempts(int transientSocketfd, sockaddr_in &destin, std::vector<unsigned char> &serializedData) const {
+    Datagram response;
+    for (int i = 0; i < RETRY_DATA_ATTEMPT; ++i) {
+        bool sent = sendAttempt(transientSocketfd, destin, serializedData, response, RETRY_DATA_TIMEOUT_USEC + (i * RETRY_DATA_TIMEOUT_USEC));
+        if (!sent) continue;
+        // if (!Protocol::verifyChecksum(response)) continue;
+        if (response.isACK()) return true;
+        if (response.isFIN()) return false;
+    }
+    return false;
+}
+
+bool ReliableCommunication::sendAttempt(int socketfd, sockaddr_in &destin, std::vector<unsigned char> &serializedData, Datagram &datagram, int retryMS) const {
+    const ssize_t bytes = sendto(this->socketInfo, serializedData.data(), serializedData.size(), 0,
+                                             reinterpret_cast<struct sockaddr *>(&destin), sizeof(destin));
     if (bytes < 0) {
-        throw std::runtime_error("Could not send data.");
+        return false;
     }
     sockaddr_in senderAddr{};
     senderAddr.sin_family = AF_INET;
-    if (const bool received = Protocol::readDatagramSocket(datagram, transientSocketFd.first, senderAddr); !received) {
-        close(transientSocketFd.first);
-        throw std::runtime_error("Failed to read datagram.");
-    }
-
-    // TODO: Revisar flags no sendto e afins, provavelmente nem precisaremos do flags no datagram
+    return Protocol::readDatagramSocketTimeout(datagram, socketfd, senderAddr, retryMS);
 }
-
 
 std::vector<unsigned char> ReliableCommunication::receive() {
     Datagram datagram;
@@ -78,17 +152,17 @@ std::vector<unsigned char> ReliableCommunication::receive() {
         close(socketInfo);
         throw std::runtime_error("Failed to read datagram.");
     }
-    if (datagram.getVersion() == 0 && datagram.isACK() && datagram.isSYN() && !verifyOrigin(senderAddr)) {
+    if (!verifyOrigin(senderAddr)) {
         throw std::runtime_error("Invalid sender address.");
     }
     // Extract data from the datagram
 
     handler->handleMessage(&datagram, &senderAddr, this->socketInfo);
     // TODO Este metodo deve ser listen, receive deve esperar o semaphoro e retornar a mensagem.
-    const std::vector<unsigned char>& data = datagram.getData();
+    auto data = datagram.getData();
 
     // Return the data
-    return data;
+    return *data;
 }
 
 void ReliableCommunication::printNodes(std::mutex *lock) const
@@ -124,7 +198,7 @@ Datagram ReliableCommunication::createAckDatagram(unsigned short dataLength) {
 }
 
 unsigned short ReliableCommunication::calculateTotalDatagrams(unsigned int dataLength) {
-    const double result = static_cast<double>(dataLength) / 16384;
+    const double result = static_cast<double>(dataLength) / 1024;
     return static_cast<int>(ceil(result));
 }
 

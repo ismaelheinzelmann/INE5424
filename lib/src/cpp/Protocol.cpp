@@ -13,8 +13,6 @@
 #include <fcntl.h>
 
 
-#define BYTE_TIMEOUT_SEC 0 // Timeout duration in seconds
-#define BYTE_TIMEOUT_USEC 500000 // Timeout duration in microseconds (500 ms)
 
 // Serializes data and computes the checksum while doing so.
 std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
@@ -43,7 +41,7 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
     serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
 
     for (unsigned short i = 0; i < 4; i++) serializedDatagram.push_back(0);
-    for (unsigned int i = 0; i < datagram->getDataLength(); i++) serializedDatagram.push_back(datagram->getData()[i]);
+    for (unsigned int i = 0; i < datagram->getDataLength(); i++) serializedDatagram.push_back((*datagram->getData())[i]);
     unsigned char checksum[4] = {0, 0, 0, 0};
     TypeUtils::uintToBytes(computeChecksum(serializedDatagram), checksum);
     for (unsigned short i = 0; i < 4; i++) serializedDatagram[12 + i] = checksum[i];
@@ -74,16 +72,14 @@ bool Protocol::verifyChecksum(Datagram datagram) {
     return datagram.getChecksum() == computeChecksum(serialize(&datagram));
 }
 
-
-bool Protocol::readDatagramSocketTimeout(Datagram& datagramBuff, int socketfd, sockaddr_in& senderAddr) {
+bool Protocol::readDatagramSocketTimeout(Datagram& datagramBuff, int socketfd, sockaddr_in& senderAddr, int timeoutMS) {
     // Create a buffer to receive data
-    auto bytesBuffer = std::vector<unsigned char>(1040);
 
     // Set up file descriptor set and timeout
     fd_set read_fds;
     timeval timeout{};
-    timeout.tv_sec = BYTE_TIMEOUT_SEC;
-    timeout.tv_usec = BYTE_TIMEOUT_USEC;
+    timeout.tv_sec = timeoutMS / 1000;
+    timeout.tv_usec = (timeoutMS % 1000) * 1000;
 
     // Initialize the file descriptor set
     FD_ZERO(&read_fds);
@@ -105,7 +101,9 @@ bool Protocol::readDatagramSocketTimeout(Datagram& datagramBuff, int socketfd, s
 
     // Check if the socket is readable
     if (FD_ISSET(socketfd, &read_fds)) {
-        ssize_t bytes_received = recvfrom(socketfd, bytesBuffer.data(), bytesBuffer.size(), 0, reinterpret_cast<struct sockaddr*>(&senderAddr), nullptr);
+        socklen_t senderAddrLen = sizeof(senderAddr);
+        auto bytesBuffer = std::vector<unsigned char>(1040);
+        ssize_t bytes_received = recvfrom(socketfd, bytesBuffer.data(), bytesBuffer.size(), 0, reinterpret_cast<struct sockaddr*>(&senderAddr), &senderAddrLen);
         if (bytes_received < 0) {
             // Error occurred in recvfrom()
             perror("recvfrom");
@@ -116,7 +114,7 @@ bool Protocol::readDatagramSocketTimeout(Datagram& datagramBuff, int socketfd, s
         bufferToDatagram(datagramBuff, bytesBuffer);
         // Ensure we don't go out of bounds
         if (bytes_received > 16) {
-            const std::vector<unsigned char> dataVec(
+            const std::vector dataVec(
                 bytesBuffer.begin() + 16,
                 bytesBuffer.begin() + 16 + datagramBuff.getDataLength()
             );
