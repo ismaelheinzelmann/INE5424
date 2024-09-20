@@ -8,14 +8,22 @@
 std::mutex g_lock;
 bool g_running = true;
 
-void receiveAndPrint(ReliableCommunication& rb) {
+void receive(ReliableCommunication& rb) {
 	while (g_running) {
-		std::vector<unsigned char> receivedMessage = rb.receive();
+		rb.listen();
+	}
+}
+
+void print(ReliableCommunication& rb) {
+	while (g_running) {
+		std::vector<unsigned char>* receivedMessage = rb.receive();
 
 		std::lock_guard guard(g_lock);
-		std::string message(receivedMessage.begin(), receivedMessage.end());
+		std::string message(receivedMessage->begin(), receivedMessage->end());
 		// TODO Modificar resposta futuramente para mostrar quem enviou a mensagem
 		std::cout << "Received message " << ": " << message << std::endl;
+		delete receivedMessage;
+
 	}
 }
 
@@ -30,11 +38,12 @@ int main(int argc, char* argv[]) {
 	ReliableCommunication rb("../../../config/config", id);
 
 	// Start the receiving thread
-	std::thread receiveThread(receiveAndPrint, std::ref(rb));
+	std::thread receiveThread(receive, std::ref(rb));
+	std::thread printThread(print, std::ref(rb));
 
 	while (g_running) {
 		rb.printNodes(&g_lock);
-		std::string message, idString;
+		std::string message = std::string(), idString = std::string();
 		std::cout << "Choose which node you want to send the message, or nothing to end the program:" << std::endl;
 		std::cin >> idString;
 		if (idString.empty()) {
@@ -52,6 +61,10 @@ int main(int argc, char* argv[]) {
 	// Notify the receiver thread to stop and wait for it to finish
 	if (receiveThread.joinable()) {
 		receiveThread.join();
+	}
+
+	if (printThread.joinable()) {
+		printThread.join();
 	}
 
 	return 0;
