@@ -38,7 +38,7 @@ bool returnTrueWithProbability(int n) {
 
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	if (!returnTrueWithProbability(95)) return;
+	if (!returnTrueWithProbability(99)) return;
 	// if (!verifyMessage(request))
 	// {
 	// 	sendDatagramNACK(request, socketfd);

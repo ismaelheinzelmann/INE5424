@@ -14,11 +14,11 @@
 
 #include <cstring>
 #include <thread>
-#define RETRY_ACK_ATTEMPT 4
-#define RETRY_ACK_TIMEOUT_USEC 250
+#define RETRY_ACK_ATTEMPT 3
+#define RETRY_ACK_TIMEOUT_USEC 200
 
-#define RETRY_DATA_ATTEMPT 8
-#define RETRY_DATA_TIMEOUT_USEC 250
+#define RETRY_DATA_ATTEMPT 4
+#define RETRY_DATA_TIMEOUT_USEC 200
 // clang-format off
 
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID)
@@ -91,30 +91,36 @@ bool ReliableCommunication::send(const unsigned short id,
 		for (unsigned short j = 0; j < 4; j++)
 			serializedDatagram[12 + j] = checksum[j];
 		Datagram response;
-		for (int j = 0; j < RETRY_DATA_ATTEMPT; ++j)
+		bool versionSent = false;
+		for (int j = 1; j <= RETRY_DATA_ATTEMPT;)
 		{
+			versionSent = false;
 			const ssize_t bytes = sendto(this->socketInfo, serializedDatagram.data(), serializedDatagram.size(), 0,
 			                             reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
 			if (bytes < 0)
 			{
 				std::cout << "Failed sending datagram." << std::endl;
+				j++;
 				continue;
 			}
 
 			sockaddr_in senderAddr{};
 			senderAddr.sin_family = AF_INET;
 			bool answer = Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, senderAddr,
-			                                                  RETRY_DATA_TIMEOUT_USEC + RETRY_DATA_TIMEOUT_USEC * j);
+			                                                  RETRY_DATA_TIMEOUT_USEC*j);
 			// TODO Validate if is really the right sender
 			// TODO Validate checksum
 			if (!answer)
 			{
 				std::cout << "Receiver didn't respond ACK for version " << i << std::endl;
+				j++;
 				continue;
 			}
 			if (response.isNACK())
 			{
-				std::cout << "Receiver didn't agree with version " << i << std::endl;
+				if(response.getVersion() != i + 1) continue;
+				std::cout << "Receiver didn't agree with version " << response.getVersion() << std::endl;
+				j++;
 				continue;
 			}
 
@@ -122,17 +128,22 @@ bool ReliableCommunication::send(const unsigned short id,
 			{
 				std::cout << "Receiver ended the connection, message successfully sent." << std::endl;
 				close(transientSocketFd.first);
+				versionSent = true;
 				return true;
 			}
 			if (response.isACK() && response.getVersion() == i + 1)
 			{
+				versionSent = true;
 				break;
 			}
 			if (response.isFIN())
 				return false;
 		}
+		if (!versionSent){
+			break;
+		}
 	}
-	std::cout<<"Failed sending message" << std::endl;
+	std::cout << "Failed sending message" << std::endl;
 	close(transientSocketFd.first);
 	return false;
 }
