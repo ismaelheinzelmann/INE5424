@@ -23,25 +23,37 @@ bool MessageReceiver::verifyMessage(Request *request)
 	return Protocol::verifyChecksum(request->datagram, request->data);
 }
 
+bool returnTrueWithProbability(int n) {
+	// Ensure n is between 0 and 100
+	if (n < 0 || n > 100) {
+		throw std::invalid_argument("Probability must be between 0 and 100.");
+	}
+
+	// Generate a random number between 0 and 99
+	int randomValue = std::rand() % 100;
+
+	// Return true if randomValue is less than n
+	return randomValue < n;
+}
+
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	if (verifyMessage(request))
+	if (!returnTrueWithProbability(95)) return;
+	// if (!verifyMessage(request))
+	// {
+	// 	sendDatagramNACK(request, socketfd);
+	// }
+	if ((request->datagram->isACK() && request->datagram->isSYN()) || request->datagram->isFIN())
+		return;
+	if (request->datagram->isSYN() && !request->datagram->isACK())
 	{
-		sendDatagramNACK(request, socketfd);
+		handleFirstMessage(request, socketfd);
 	}
 	else
 	{
-		if (request->datagram->isSYN())
-		{
-			handleFirstMessage(request, socketfd);
-		}
-		else if ((request->datagram->isACK() && request->datagram->isSYN()) || request->datagram->isFIN())
-		{}
-		else
-		{
-			handleDataMessage(request, socketfd);
-		}
+		handleDataMessage(request, socketfd);
 	}
+	// }
 	delete request->datagram;
 	delete request->data;
 	delete request->clientRequest;
@@ -79,7 +91,9 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 		if (sent)
 		{
 			sendDatagramFINACK(request, socketfd);
+			if (message->delivered) return;
 			messageQueue->push(message->getData());
+			message->delivered = true;
 			return;
 		}
 		sendDatagramACK(request, socketfd);

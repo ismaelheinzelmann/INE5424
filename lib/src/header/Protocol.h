@@ -12,6 +12,7 @@ class Protocol
 {
 public:
 	static std::vector<unsigned char> serialize(Datagram* datagram);
+	static void setChecksum(std::vector<unsigned char>* data);
 	static Datagram deserialize(std::vector<unsigned char>& serializedDatagram);
 	static unsigned int computeChecksum(std::vector<unsigned char>* serializedDatagram);
 	static bool verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram);
@@ -29,7 +30,6 @@ public:
 
 private:
 	static void bufferToDatagram(Datagram& datagramBuff, const std::vector<unsigned char>& bytesBuffer);
-	std::vector<unsigned char> serialize(bool (Protocol::*datagram)(Datagram*, sockaddr_in*, int, Flags));
 };
 
 

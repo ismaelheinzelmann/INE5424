@@ -14,7 +14,7 @@ Message::Message(unsigned short totalDatagrams)
 
 Message::~Message()
 {
-	if (!sent)
+	if (!delivered)
 	{
 		delete data;
 	}
@@ -23,7 +23,7 @@ Message::~Message()
 //Adds data to the message. Returns true if ended the receive.
 bool Message::addData(std::vector<unsigned char> *data)
 {
-	if (sent) return true;
+	if (sent || delivered) return true;
 	this->data->insert(this->data->end(), data->begin(), data->end());
 	incrementVersion();
 	lastUpdate = std::chrono::system_clock::now();

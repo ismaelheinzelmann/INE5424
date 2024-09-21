@@ -14,6 +14,7 @@ public:
     bool verifyMessage(Datagram& datagram) const;
     std::vector<unsigned char> *getData() const;
     bool sent = false;
+    bool delivered = false;
 
 private:
     void incrementVersion();

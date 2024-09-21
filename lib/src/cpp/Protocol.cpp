@@ -44,11 +44,13 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram)
 		serializedDatagram.push_back(0);
 	for (unsigned int i = 0; i < datagram->getDataLength(); i++)
 		serializedDatagram.push_back((*datagram->getData())[i]);
-	unsigned char checksum[4] = {0, 0, 0, 0};
-	TypeUtils::uintToBytes(computeChecksum(&serializedDatagram), checksum);
-	for (unsigned short i = 0; i < 4; i++)
-		serializedDatagram[12 + i] = checksum[i];
 	return serializedDatagram;
+}
+
+void Protocol::setChecksum(std::vector<unsigned char> *data)
+{
+	auto checksum = computeChecksum(data);
+	memcpy(data->data() + 12, &checksum, sizeof(checksum));
 }
 
 // Deserializes data and returns a Datagram object.
@@ -68,22 +70,35 @@ Datagram Protocol::deserialize(std::vector<unsigned char> &serializedDatagram)
 // Computes the checksum of a datagram, the checksum field will be zero while computing.
 unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDatagram)
 {
-	auto serializedData = *serializedDatagram;
-	serializedData.erase(serializedData.begin() + 12, serializedData.begin() + 15);
-	unsigned int checksum = CRC32::calculate(serializedData);
-	return checksum;
+	unsigned char buff[2] = {0, 0};
+	buff[0] = serializedDatagram->at(8);
+	buff[1] = serializedDatagram->at(9);
+	auto *length = reinterpret_cast<unsigned short *>(buff);
+	auto serializedData = std::vector<unsigned char>();
+	for (int i = 0; i < 12+ (*length); ++i)
+	{
+		serializedData.push_back(serializedDatagram->at(i));
+	}
+	for (int i = 0; i < 4; ++i)
+	{
+		serializedData.push_back(0);
+	}
+	for (unsigned int i = 0; i < (*length); i++)
+	{
+		serializedData.push_back(serializedData[i]+16);
+	}
+	return CRC32::calculate(serializedData);
 }
 
 bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram)
 {
-	return datagram->getChecksum() == computeChecksum(serializedDatagram);
+	auto dch = datagram->getChecksum();
+	auto cch = computeChecksum(serializedDatagram);
+	return dch == cch;
 }
 
 bool Protocol::readDatagramSocketTimeout(Datagram &datagramBuff, int socketfd, sockaddr_in &senderAddr, int timeoutMS)
 {
-	// Create a buffer to receive data
-
-	// Set up file descriptor set and timeout
 	fd_set read_fds;
 	timeval timeout{};
 	timeout.tv_sec = timeoutMS / 1000;

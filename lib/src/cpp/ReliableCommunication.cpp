@@ -15,10 +15,10 @@
 #include <cstring>
 #include <thread>
 #define RETRY_ACK_ATTEMPT 4
-#define RETRY_ACK_TIMEOUT_USEC 250000
+#define RETRY_ACK_TIMEOUT_USEC 250
 
 #define RETRY_DATA_ATTEMPT 8
-#define RETRY_DATA_TIMEOUT_USEC 250000
+#define RETRY_DATA_TIMEOUT_USEC 250
 // clang-format off
 
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID)
@@ -87,7 +87,7 @@ bool ReliableCommunication::send(const unsigned short id,
 		versionDatagram.setDataLength(versionDatagram.getData()->size());
 		auto serializedDatagram = Protocol::serialize(&versionDatagram);
 		unsigned char checksum[4] = {0, 0, 0, 0};
-		TypeUtils::uintToBytes(Protocol::computeChecksum(&serializedDatagram), checksum);
+		// TypeUtils::uintToBytes(Protocol::computeChecksum(&serializedDatagram), checksum);
 		for (unsigned short j = 0; j < 4; j++)
 			serializedDatagram[12 + j] = checksum[j];
 		Datagram response;
@@ -97,19 +97,30 @@ bool ReliableCommunication::send(const unsigned short id,
 			                             reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
 			if (bytes < 0)
 			{
-				return false;
+				std::cout << "Failed sending datagram." << std::endl;
+				continue;
 			}
+
 			sockaddr_in senderAddr{};
 			senderAddr.sin_family = AF_INET;
-			bool sent = Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, senderAddr,
-			                                                RETRY_DATA_TIMEOUT_USEC + RETRY_DATA_TIMEOUT_USEC * j);
+			bool answer = Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, senderAddr,
+			                                                  RETRY_DATA_TIMEOUT_USEC + RETRY_DATA_TIMEOUT_USEC * j);
 			// TODO Validate if is really the right sender
 			// TODO Validate checksum
-			if (!sent || response.isNACK())
+			if (!answer)
+			{
+				std::cout << "Receiver didn't respond ACK for version " << i << std::endl;
 				continue;
+			}
+			if (response.isNACK())
+			{
+				std::cout << "Receiver didn't agree with version " << i << std::endl;
+				continue;
+			}
+
 			if (response.getVersion() == totalDatagrams && response.isACK() && response.isFIN())
 			{
-				std::cout << "Receiver ended the connection." << std::endl;
+				std::cout << "Receiver ended the connection, message successfully sent." << std::endl;
 				close(transientSocketFd.first);
 				return true;
 			}
@@ -117,10 +128,11 @@ bool ReliableCommunication::send(const unsigned short id,
 			{
 				break;
 			}
-			if (response.isFIN()) return false;
-			std::cout << "Receiver didn't respond ACK for version " << i << std::endl;
+			if (response.isFIN())
+				return false;
 		}
 	}
+	std::cout<<"Failed sending message" << std::endl;
 	close(transientSocketFd.first);
 	return false;
 }
@@ -136,14 +148,16 @@ bool ReliableCommunication::ackAttempts(int transientSocketfd, sockaddr_in &dest
 	{
 		bool sent = Protocol::sendDatagram(datagram, &destin, socketInfo, &flags);
 		if (!sent)
-			return false;
+		{
+			std::cout << "Failed sending datagram." << std::endl;
+			continue;
+		}
 		sockaddr_in senderAddr{};
 		senderAddr.sin_family = AF_INET;
 		sent = Protocol::readDatagramSocketTimeout(response, transientSocketfd, senderAddr,
 		                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
 		if (!sent)
 			continue;
-		// std::cout << "ACK Sent." << std::endl;
 		// if (!Protocol::verifyChecksum(response)) continue;
 		if (response.isACK() && response.isSYN() && datagram->getVersion() == response.getVersion())
 		{
@@ -170,20 +184,26 @@ bool ReliableCommunication::sendAttempt(int socketfd, sockaddr_in &destin, std::
 }
 
 
-void ReliableCommunication::listen() {
-	std::thread processingThread([this] { processDatagram(); });
+void ReliableCommunication::listen()
+{
+	std::thread processingThread([this]
+	{
+		processDatagram();
+	});
 	processingThread.detach();
 }
 
 void ReliableCommunication::processDatagram()
 {
-	while (true) {
+	while (true)
+	{
 		const auto datagram = new Datagram();
 		const auto senderAddr = new sockaddr_in{};
 		const auto buffer = new std::vector<unsigned char>(1040);
 		Protocol::readDatagramSocket(datagram, socketInfo, senderAddr, buffer);
 
-		if (!verifyOrigin(senderAddr)) {
+		if (!verifyOrigin(senderAddr))
+		{
 			continue;
 		}
 		senderAddr->sin_family = AF_INET;
