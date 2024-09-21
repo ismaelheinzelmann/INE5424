@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 #include "MessageReceiver.h"
-#include <semaphore>
+#include "../header/Request.h"
+#include "../header/BlockingQueue.h"
+
 #ifndef RELIABLE_H
 #define RELIABLE_H
 
@@ -29,6 +31,8 @@ public:
 	                 std::vector<unsigned char>& serializedData,
 	                 Datagram& datagram, int retryMS) const;
 	void listen();
+	void processDatagram();
+	void processDatagram(Datagram* datagram, sockaddr_in* senderAddr) const;
 	std::vector<unsigned char>* receive();
 	void receiveAndPrint(std::mutex* lock);
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
@@ -38,12 +42,9 @@ private:
 	unsigned short id;
 	MessageReceiver* handler;
 	std::map<unsigned short, sockaddr_in> configMap;
-	std::queue<std::vector<unsigned char>*> messages;
-	std::mutex messagesLock;
-	std::counting_semaphore<> semaphore;
-
-
-	bool verifyOrigin(sockaddr_in& senderAddr);
+	BlockingQueue<std::vector<unsigned char>*> messageQueue;
+	BlockingQueue<Request*> requestQueue;
+	bool verifyOrigin(sockaddr_in* senderAddr);
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);
 };
 

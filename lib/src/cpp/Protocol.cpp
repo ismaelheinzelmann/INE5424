@@ -10,6 +10,8 @@
 #include <sys/select.h>
 #include <cstdio>
 #include <fcntl.h>
+#include <random>
+
 #include "../header/Flags.h"
 // Serializes data and computes the checksum while doing so.
 std::vector<unsigned char> Protocol::serialize(Datagram *datagram)
@@ -43,7 +45,7 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram)
 	for (unsigned int i = 0; i < datagram->getDataLength(); i++)
 		serializedDatagram.push_back((*datagram->getData())[i]);
 	unsigned char checksum[4] = {0, 0, 0, 0};
-	TypeUtils::uintToBytes(computeChecksum(serializedDatagram), checksum);
+	TypeUtils::uintToBytes(computeChecksum(&serializedDatagram), checksum);
 	for (unsigned short i = 0; i < 4; i++)
 		serializedDatagram[12 + i] = checksum[i];
 	return serializedDatagram;
@@ -64,17 +66,17 @@ Datagram Protocol::deserialize(std::vector<unsigned char> &serializedDatagram)
 }
 
 // Computes the checksum of a datagram, the checksum field will be zero while computing.
-unsigned int Protocol::computeChecksum(std::vector<unsigned char> serializedDatagram)
+unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDatagram)
 {
-	// Remove checksum from serialized datagram
-	serializedDatagram.erase(serializedDatagram.begin() + 12, serializedDatagram.begin() + 15);
-	unsigned int checksum = CRC32::calculate(serializedDatagram);
+	auto serializedData = *serializedDatagram;
+	serializedData.erase(serializedData.begin() + 12, serializedData.begin() + 15);
+	unsigned int checksum = CRC32::calculate(serializedData);
 	return checksum;
 }
 
-bool Protocol::verifyChecksum(Datagram datagram)
+bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram)
 {
-	return datagram.getChecksum() == computeChecksum(serialize(&datagram));
+	return datagram->getChecksum() == computeChecksum(serializedDatagram);
 }
 
 bool Protocol::readDatagramSocketTimeout(Datagram &datagramBuff, int socketfd, sockaddr_in &senderAddr, int timeoutMS)
@@ -139,19 +141,16 @@ bool Protocol::readDatagramSocketTimeout(Datagram &datagramBuff, int socketfd, s
 	return false;
 }
 
-bool Protocol::readDatagramSocket(Datagram &datagramBuff, int socketfd, sockaddr_in &senderAddr)
+bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr, std::vector<unsigned char>* buff)
 {
-	auto bytesBuffer = std::vector<unsigned char>(1040);
-	// std::memset(&senderAddr, 0, sizeof(senderAddr));
-	senderAddr.sin_family = AF_INET;
 	socklen_t senderAddrLen = sizeof(senderAddr);
-	ssize_t bytes_received = recvfrom(socketfd, bytesBuffer.data(), bytesBuffer.size(), 0,
-	                                  reinterpret_cast<struct sockaddr *>(&senderAddr), &senderAddrLen);
+	ssize_t bytes_received = recvfrom(socketfd, buff->data(), buff->size(), 0,
+	                                  reinterpret_cast<struct sockaddr *>(senderAddr), &senderAddrLen);
 	if (bytes_received < 0)
 		return false;
-	bufferToDatagram(datagramBuff, bytesBuffer);
-	const std::vector dataVec(bytesBuffer.begin() + 16, bytesBuffer.begin() + 16 + datagramBuff.getDataLength());
-	datagramBuff.setData(dataVec);
+	bufferToDatagram(*datagramBuff, *buff);
+	const std::vector dataVec(buff->begin() + 16, buff->begin() + 16 + datagramBuff->getDataLength());
+	datagramBuff->setData(dataVec);
 	return true;
 }
 
@@ -166,8 +165,22 @@ void Protocol::bufferToDatagram(Datagram &datagramBuff, const std::vector<unsign
 	datagramBuff.setChecksum(TypeUtils::buffToUnsignedInt(bytesBuffer, 12));
 }
 
+bool randomReturnPercent() {
+	// Create a random number generator
+	static std::random_device rd;  // Obtain a random number from hardware
+	static std::mt19937 eng(rd());  // Seed the generator
+	static std::uniform_int_distribution<> distr(1, 100); // Define the range
+
+	// Generate a random number between 1 and 100
+	int randomValue = distr(eng);
+
+	// Return true if the random number is less than or equal to 70
+	return randomValue <= 70;
+}
+
 bool Protocol::sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, Flags *flags)
 {
+	// if (randomReturnPercent()) return true;
 	setFlags(datagram, flags);
 	const auto serializedDatagram = serialize(datagram);
 	const ssize_t bytes = sendto(socketfd, serializedDatagram.data(), serializedDatagram.size(), 0,

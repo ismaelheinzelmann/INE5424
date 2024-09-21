@@ -1,40 +1,41 @@
+#pragma once
 #ifndef MESSAGEHANDLER_H
 #define MESSAGEHANDLER_H
+#include "BlockingQueue.h"
+
 #include "Datagram.h"
 #include "Message.h"
 #include <map>
-#include <queue>
 #include <vector>
 #include <shared_mutex>
-#include <netinet/in.h>
-#include <semaphore>
+#include "Request.h"
 
 // Thread that verifies every N seconds and remove requisitions that timedout;
 class MessageReceiver
 {
 public:
-    MessageReceiver(std::counting_semaphore<>* sem, std::mutex *messageLock, std::queue<std::vector<unsigned char>*>* messages);
+    MessageReceiver(BlockingQueue<std::vector<unsigned char> *>* messageQueue, BlockingQueue<Request *>* requestQueue);
+    static bool verifyMessage(Request* request);
     ~MessageReceiver() = default;
-    void handleMessage(Datagram* datagram, sockaddr_in* from, int socketfd);
-    void handleFirstMessage(Datagram* datagram, sockaddr_in* from, int socketfd);
-    void handleDataMessage(Datagram* datagram, sockaddr_in* from, int socketfd);
-    std::vector<unsigned char> *getReceivedData();
+    void handleMessage(Request *request, int socketfd);
+    void handleFirstMessage(Request* request, int socketfd);
+    void handleDataMessage(Request* request, int socketfd);
 
 private:
     std::map<std::pair<in_addr_t, in_port_t>, Message*> messages;
     std::shared_mutex messagesMutex;
 
-    std::queue<std::vector<unsigned char>*> *receivedMessages;
-    std::mutex *receivedMessagesMutex;
-    std::counting_semaphore<> *semaphore;
+    BlockingQueue<std::vector<unsigned char>*> *messageQueue;
+    BlockingQueue<Request*> *requestQueue;
 
 
-        static std::pair<in_addr_t, in_port_t> getIdentifier(sockaddr_in* from);
+    static std::pair<in_addr_t, in_port_t> getIdentifier(sockaddr_in* from);
+    static bool sendDatagramSYNACK(Datagram* datagram, sockaddr_in* from, int socketfd);
     Message* getMessage(sockaddr_in* from);
-    static bool sendDatagramACK(Datagram* datagram, sockaddr_in* from, int socketfd);
-    static bool sendDatagramNACK(Datagram* datagram, sockaddr_in* from, int socketfd);
-    static bool sendDatagramFINACK(Datagram *datagram, sockaddr_in *from, int socketfd);
-    static bool sendDatagramFIN(Datagram* datagram, sockaddr_in* from, int socketfd);
+    static bool sendDatagramACK(Request* request, int socketfd);
+    static bool sendDatagramNACK(Request* request, int socketfd);
+    static bool sendDatagramFINACK(Request* request, int socketfd);
+    static bool sendDatagramFIN(Request* request, int socketfd);
 
 };
 

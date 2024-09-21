@@ -8,20 +8,19 @@
 std::mutex g_lock;
 bool g_running = true;
 
-void receive(ReliableCommunication& rb) {
-	while (g_running) {
-		rb.listen();
-	}
-}
-
 void print(ReliableCommunication& rb) {
 	while (g_running) {
 		std::vector<unsigned char>* receivedMessage = rb.receive();
 
-		std::lock_guard guard(g_lock);
-		std::string message(receivedMessage->begin(), receivedMessage->end());
-		// TODO Modificar resposta futuramente para mostrar quem enviou a mensagem
-		std::cout << "Received message " << ": " << message << std::endl;
+		// Lock the mutex only after receiving the message
+		{
+			std::lock_guard guard(g_lock);
+			// std::string message(receivedMessage->begin(), receivedMessage->end());
+			// TODO: Modify response in the future to show who sent the message
+			std::cout << "Received message: " << receivedMessage->size() << " bytes if size"<< std::endl;
+		}
+
+		// Clean up after locking
 		delete receivedMessage;
 
 	}
@@ -38,7 +37,7 @@ int main(int argc, char* argv[]) {
 	ReliableCommunication rb("../../../config/config", id);
 
 	// Start the receiving thread
-	std::thread receiveThread(receive, std::ref(rb));
+	rb.listen();
 	std::thread printThread(print, std::ref(rb));
 
 	while (g_running) {
@@ -56,11 +55,6 @@ int main(int argc, char* argv[]) {
 
 		std::vector<unsigned char> messageBytes(message.begin(), message.end());
 		rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes);
-	}
-
-	// Notify the receiver thread to stop and wait for it to finish
-	if (receiveThread.joinable()) {
-		receiveThread.join();
 	}
 
 	if (printThread.joinable()) {

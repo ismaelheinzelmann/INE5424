@@ -1,75 +1,92 @@
 #include "../header/MessageReceiver.h"
 
+#include <Request.h>
 #include <cassert>
 
 #include "../header/Datagram.h"
 #include <map>
 #include <shared_mutex>
 #include "../header/Protocol.h"
+#include "../header/BlockingQueue.h"
 
-MessageReceiver::MessageReceiver(std::counting_semaphore<>* sem, std::mutex *messageLock, std::queue<std::vector<unsigned char>*>* messages){
+MessageReceiver::MessageReceiver(BlockingQueue<std::vector<unsigned char> *> *messageQueue,
+                                 BlockingQueue<Request *> *requestQueue)
+{
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
-	this->semaphore = sem;
-	this->receivedMessages = messages;
-	this->receivedMessagesMutex = messageLock;
-
+	this->messageQueue = messageQueue;
+	this->requestQueue = requestQueue;
 }
 
-void MessageReceiver::handleMessage(Datagram *datagram, sockaddr_in *from, int socketfd)
+
+bool MessageReceiver::verifyMessage(Request *request)
 {
-	if (datagram->isSYN())
+	return Protocol::verifyChecksum(request->datagram, request->data);
+}
+
+void MessageReceiver::handleMessage(Request *request, int socketfd)
+{
+	if (verifyMessage(request))
 	{
-		handleFirstMessage(datagram, from, socketfd);
+		sendDatagramNACK(request, socketfd);
 	}
-	else if ((datagram->isACK() && datagram->isSYN()) || datagram->isFIN())
-	{}
 	else
 	{
-		handleDataMessage(datagram, from, socketfd);
+		if (request->datagram->isSYN())
+		{
+			handleFirstMessage(request, socketfd);
+		}
+		else if ((request->datagram->isACK() && request->datagram->isSYN()) || request->datagram->isFIN())
+		{}
+		else
+		{
+			handleDataMessage(request, socketfd);
+		}
 	}
+	delete request->datagram;
+	delete request->data;
+	delete request->clientRequest;
+	delete request;
 }
 
 
 // Create message in messages
 // Return ack for the zero datagram
 // TODO destrutor
-void MessageReceiver::handleFirstMessage(Datagram *datagram, sockaddr_in *from, int socketfd)
+void MessageReceiver::handleFirstMessage(Request *request, int socketfd)
 {
-	auto *message = new Message(datagram->getDatagramTotal());
-	from->sin_port = datagram->getSourcePort();
-	auto identifier = getIdentifier(from);
+	auto *message = new Message(request->datagram->getDatagramTotal());
+	request->clientRequest->sin_port = request->datagram->getSourcePort();
+	auto identifier = getIdentifier(request->clientRequest);
 	std::lock_guard lock(messagesMutex);
 	messages[identifier] = message;
-	sendDatagramACK(datagram, from, socketfd);
+	sendDatagramACK(request, socketfd);
 }
 
-void MessageReceiver::handleDataMessage(Datagram *datagram, sockaddr_in *from, int socketfd)
+void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 {
-	from->sin_port = datagram->getSourcePort();
+	request->clientRequest->sin_port = request->datagram->getSourcePort();
 	std::shared_lock lock(messagesMutex);
-	Message *message = getMessage(from);
+	Message *message = getMessage(request->clientRequest);
 	if (message == nullptr)
 	{
-		sendDatagramFIN(datagram, from, socketfd);
+		sendDatagramFIN(request, socketfd);
 	}
 	assert(message != nullptr);
 
-	if (message->verifyMessage(*datagram))
+	if (message->verifyMessage(*(request->datagram)))
 	{
-		bool sent = message->addData(datagram->getData());
+		bool sent = message->addData(request->datagram->getData());
 		if (sent)
 		{
-			sendDatagramFINACK(datagram, from, socketfd);
-			std::lock_guard messagesLock(*receivedMessagesMutex);
-			this->receivedMessages->push(message->getData());
-			semaphore->release(1);
+			sendDatagramFINACK(request, socketfd);
+			messageQueue->push(message->getData());
 			return;
 		}
-		sendDatagramACK(datagram, from, socketfd);
+		sendDatagramACK(request, socketfd);
 	}
 	else
 	{
-		sendDatagramNACK(datagram, from, socketfd);
+		sendDatagramNACK(request, socketfd);
 	}
 }
 
@@ -92,43 +109,43 @@ std::pair<in_addr_t, in_port_t> MessageReceiver::getIdentifier(sockaddr_in *from
 	return std::make_pair(fromIP, fromPort);
 }
 
-bool MessageReceiver::sendDatagramACK(Datagram *datagram, sockaddr_in *from, int socketfd)
+bool MessageReceiver::sendDatagramACK(Request *request, int socketfd)
 {
 	auto datagramACK = Datagram();
-	datagramACK.setVersion(datagram->getVersion());
+	datagramACK.setVersion(request->datagram->getVersion());
 	Flags flags;
 	flags.ACK = true;
 	Protocol::setFlags(&datagramACK, &flags);
-	return Protocol::sendDatagram(datagram, from, socketfd, &flags);
+	return Protocol::sendDatagram(request->datagram, request->clientRequest, socketfd, &flags);
 }
 
-bool MessageReceiver::sendDatagramNACK(Datagram *datagram, sockaddr_in *from, int socketfd)
+bool MessageReceiver::sendDatagramNACK(Request *request, int socketfd)
 {
 	auto datagramNACK = Datagram();
-	datagramNACK.setVersion(datagram->getVersion());
+	datagramNACK.setVersion(request->datagram->getVersion());
 	Flags flags;
 	flags.NACK = true;
 	Protocol::setFlags(&datagramNACK, &flags);
-	return Protocol::sendDatagram(datagram, from, socketfd, &flags);
+	return Protocol::sendDatagram(request->datagram, request->clientRequest, socketfd, &flags);
 }
 
-bool MessageReceiver::sendDatagramFIN(Datagram *datagram, sockaddr_in *from, int socketfd)
+bool MessageReceiver::sendDatagramFIN(Request *request, int socketfd)
 {
 	auto datagramFIN = Datagram();
-	datagramFIN.setVersion(datagram->getVersion());
+	datagramFIN.setVersion(request->datagram->getVersion());
 	Flags flags;
 	flags.FIN = true;
 	Protocol::setFlags(&datagramFIN, &flags);
-	return Protocol::sendDatagram(datagram, from, socketfd, &flags);
+	return Protocol::sendDatagram(request->datagram, request->clientRequest, socketfd, &flags);
 }
 
-bool MessageReceiver::sendDatagramFINACK(Datagram *datagram, sockaddr_in *from, int socketfd)
+bool MessageReceiver::sendDatagramFINACK(Request *request, int socketfd)
 {
 	auto datagramFIN = Datagram();
-	datagramFIN.setVersion(datagram->getVersion());
+	datagramFIN.setVersion(request->datagram->getVersion());
 	Flags flags;
 	flags.FIN = true;
 	flags.ACK = true;
 	Protocol::setFlags(&datagramFIN, &flags);
-	return Protocol::sendDatagram(datagram, from, socketfd, &flags);
+	return Protocol::sendDatagram(request->datagram, request->clientRequest, socketfd, &flags);
 }

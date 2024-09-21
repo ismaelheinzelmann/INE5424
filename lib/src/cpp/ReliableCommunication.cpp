@@ -1,7 +1,7 @@
 #include "../header/ReliableCommunication.h"
 #include "../header/ConfigParser.h"
 #include "../header/Protocol.h"
-
+#include "../header/BlockingQueue.h"
 #include <TypeUtils.h>
 #include <cmath>
 #include <iostream>
@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <thread>
 #define RETRY_ACK_ATTEMPT 4
 #define RETRY_ACK_TIMEOUT_USEC 250000
 
@@ -20,8 +21,7 @@
 #define RETRY_DATA_TIMEOUT_USEC 250000
 // clang-format off
 
-ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID):
-	semaphore(0)
+ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID)
 {
 	this->configMap = ConfigParser::parseNodes(configFilePath);
 	this->id = nodeID;
@@ -41,8 +41,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 		throw std::runtime_error("Could not bind socket.");
 	}
 
-	messages = std::queue<std::vector<unsigned char>*>();
-	handler = new MessageReceiver(&semaphore, &messagesLock, &messages);
+	handler = new MessageReceiver(&messageQueue, &requestQueue);
 }
 
 ReliableCommunication::~ReliableCommunication()
@@ -76,7 +75,7 @@ bool ReliableCommunication::send(const unsigned short id,
 	{
 		auto versionDatagram = Datagram();
 		versionDatagram.setSourcePort(transientSocketFd.second.sin_port);
-		versionDatagram.setVersion(i);
+		versionDatagram.setVersion(i + 1);
 		versionDatagram.setDatagramTotal(totalDatagrams);
 		for (unsigned short j = 0; j < 1024; j++)
 		{
@@ -88,7 +87,7 @@ bool ReliableCommunication::send(const unsigned short id,
 		versionDatagram.setDataLength(versionDatagram.getData()->size());
 		auto serializedDatagram = Protocol::serialize(&versionDatagram);
 		unsigned char checksum[4] = {0, 0, 0, 0};
-		TypeUtils::uintToBytes(Protocol::computeChecksum(serializedDatagram), checksum);
+		TypeUtils::uintToBytes(Protocol::computeChecksum(&serializedDatagram), checksum);
 		for (unsigned short j = 0; j < 4; j++)
 			serializedDatagram[12 + j] = checksum[j];
 		Datagram response;
@@ -106,19 +105,20 @@ bool ReliableCommunication::send(const unsigned short id,
 			                                                RETRY_DATA_TIMEOUT_USEC + RETRY_DATA_TIMEOUT_USEC * j);
 			// TODO Validate if is really the right sender
 			// TODO Validate checksum
-			if (!sent)
+			if (!sent || response.isNACK())
 				continue;
-			if (response.isACK())
+			if (response.getVersion() == totalDatagrams && response.isACK() && response.isFIN())
 			{
-				// std::cout << "Receiver responded ACK." << std::endl;
+				std::cout << "Receiver ended the connection." << std::endl;
+				close(transientSocketFd.first);
+				return true;
+			}
+			if (response.isACK() && response.getVersion() == i + 1)
+			{
 				break;
 			}
-			// std::cout << "Receiver didn't respond ACK." << std::endl;
-			if (response.isFIN())
-			{
-				close(transientSocketFd.first);
-				return response.isACK();
-			}
+			if (response.isFIN()) return false;
+			std::cout << "Receiver didn't respond ACK for version " << i << std::endl;
 		}
 	}
 	close(transientSocketFd.first);
@@ -143,33 +143,15 @@ bool ReliableCommunication::ackAttempts(int transientSocketfd, sockaddr_in &dest
 		                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
 		if (!sent)
 			continue;
-		std::cout << "ACK Sent." << std::endl;
+		// std::cout << "ACK Sent." << std::endl;
 		// if (!Protocol::verifyChecksum(response)) continue;
 		if (response.isACK() && response.isSYN() && datagram->getVersion() == response.getVersion())
 		{
-			std::cout << "ACK Accepted." << std::endl;
+			// std::cout << "ACK Accepted." << std::endl;
 			return true;
 		}
 	}
-	return false;
-}
-
-bool ReliableCommunication::dataAttempts(int transientSocketfd, sockaddr_in &destin,
-                                         std::vector<unsigned char> &serializedData) const
-{
-	Datagram response;
-	for (int i = 0; i < RETRY_DATA_ATTEMPT; ++i)
-	{
-		bool sent = sendAttempt(transientSocketfd, destin, serializedData, response,
-		                        RETRY_DATA_TIMEOUT_USEC + (i * RETRY_DATA_TIMEOUT_USEC));
-		if (!sent)
-			continue;
-		// if (!Protocol::verifyChecksum(response)) continue;
-		if (response.isACK())
-			return true;
-		if (response.isFIN())
-			return false;
-	}
+	std::cout << "Failed ack." << std::endl;
 	return false;
 }
 
@@ -187,32 +169,32 @@ bool ReliableCommunication::sendAttempt(int socketfd, sockaddr_in &destin, std::
 	return Protocol::readDatagramSocketTimeout(datagram, socketfd, senderAddr, retryMS);
 }
 
-void ReliableCommunication::listen()
-{
-	Datagram datagram;
-	sockaddr_in senderAddr{};
-	senderAddr.sin_family = AF_INET;
-	if (const bool received = Protocol::readDatagramSocket(datagram, socketInfo, senderAddr); !received)
-	{
-		close(socketInfo);
-		throw std::runtime_error("Failed to read datagram.");
-	}
-	if (!verifyOrigin(senderAddr))
-	{
-		throw std::runtime_error("Invalid sender address.");
-	}
 
-	handler->handleMessage(&datagram, &senderAddr, this->socketInfo);
+void ReliableCommunication::listen() {
+	std::thread processingThread([this] { processDatagram(); });
+	processingThread.detach();
+}
+
+void ReliableCommunication::processDatagram()
+{
+	while (true) {
+		const auto datagram = new Datagram();
+		const auto senderAddr = new sockaddr_in{};
+		const auto buffer = new std::vector<unsigned char>(1040);
+		Protocol::readDatagramSocket(datagram, socketInfo, senderAddr, buffer);
+
+		if (!verifyOrigin(senderAddr)) {
+			continue;
+		}
+		senderAddr->sin_family = AF_INET;
+		auto request = new Request{buffer, senderAddr, datagram};
+		handler->handleMessage(request, this->socketInfo);
+	}
 }
 
 std::vector<unsigned char> *ReliableCommunication::receive()
 {
-	semaphore.acquire();
-	std::lock_guard lock(messagesLock);
-	std::vector<unsigned char> * message = messages.front();
-	messages.pop();
-	return message;
-
+	return messageQueue.pop();;
 }
 
 void ReliableCommunication::printNodes(std::mutex *printLock) const
@@ -243,11 +225,11 @@ void ReliableCommunication::receiveAndPrint(std::mutex *lock)
 	}
 }
 
-bool ReliableCommunication::verifyOrigin(sockaddr_in &senderAddr)
+bool ReliableCommunication::verifyOrigin(sockaddr_in *senderAddr)
 {
 	for (const auto &[_, nodeAddr] : this->configMap)
 	{
-		if (senderAddr.sin_addr.s_addr == nodeAddr.sin_addr.s_addr && senderAddr.sin_port == nodeAddr.sin_port)
+		if (senderAddr->sin_addr.s_addr == nodeAddr.sin_addr.s_addr && senderAddr->sin_port == nodeAddr.sin_port)
 		{
 			return true;
 		}
@@ -293,3 +275,4 @@ std::pair<int, sockaddr_in> ReliableCommunication::createUDPSocketAndGetPort()
 	// Return the file descriptor and the address
 	return {sockfd, addr};
 }
+

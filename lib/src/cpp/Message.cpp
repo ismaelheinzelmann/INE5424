@@ -23,7 +23,7 @@ Message::~Message()
 //Adds data to the message. Returns true if ended the receive.
 bool Message::addData(std::vector<unsigned char> *data)
 {
-	std::cout << std::string(data->begin(), data->end()) << std::endl;
+	if (sent) return true;
 	this->data->insert(this->data->end(), data->begin(), data->end());
 	incrementVersion();
 	lastUpdate = std::chrono::system_clock::now();
