@@ -21,10 +21,11 @@ Message::~Message()
 }
 
 //Adds data to the message. Returns true if ended the receive.
-bool Message::addData(std::vector<unsigned char> *data)
+bool Message::addData(Datagram *datagram)
 {
+	if (datagram->getVersion() <= lastVersionReceived) return false;
 	if (sent || delivered) return true;
-	this->data->insert(this->data->end(), data->begin(), data->end());
+	this->data->insert(this->data->end(), datagram->getData()->begin(), datagram->getData()->end());
 	incrementVersion();
 	lastUpdate = std::chrono::system_clock::now();
 	const bool sent = lastVersionReceived == totalDatagrams;
@@ -44,7 +45,8 @@ std::vector<unsigned char> *Message::getData() const
 bool Message::verifyMessage(Datagram &datagram) const
 {
 	const unsigned short datagramVersion = datagram.getVersion();
-	if (datagramVersion != this->lastVersionReceived && datagramVersion != lastVersionReceived + 1)
+	// if (datagramVersion != this->lastVersionReceived && datagramVersion != lastVersionReceived + 1)
+	if (datagramVersion > lastVersionReceived + 1 || datagramVersion > totalDatagrams)
 	{
 		return false;
 	}

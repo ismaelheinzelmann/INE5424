@@ -113,18 +113,13 @@ bool Protocol::readDatagramSocketTimeout(Datagram &datagramBuff, int socketfd, s
 
 	if (select_result < 0)
 	{
-		// Error occurred in select()
-		perror("select");
 		return false;
 	}
 	if (select_result == 0)
 	{
-		// Timeout occurred
-		std::cerr << "Timeout occurred\n";
 		return false;
 	}
 
-	// Check if the socket is readable
 	if (FD_ISSET(socketfd, &read_fds))
 	{
 		socklen_t senderAddrLen = sizeof(senderAddr);
@@ -133,14 +128,10 @@ bool Protocol::readDatagramSocketTimeout(Datagram &datagramBuff, int socketfd, s
 		                                  reinterpret_cast<struct sockaddr *>(&senderAddr), &senderAddrLen);
 		if (bytes_received < 0)
 		{
-			// Error occurred in recvfrom()
-			perror("recvfrom");
 			return false;
 		}
 
-		// Process the received data
 		bufferToDatagram(datagramBuff, bytesBuffer);
-		// Ensure we don't go out of bounds
 		if (bytes_received > 16)
 		{
 			const std::vector dataVec(

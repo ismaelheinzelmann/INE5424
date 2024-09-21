@@ -10,7 +10,7 @@ class Message
 public:
     explicit Message(unsigned short totalDatagrams);
     ~Message();
-    bool addData(std::vector<unsigned char>* data);
+    bool addData(Datagram *datagram);
     bool verifyMessage(Datagram& datagram) const;
     std::vector<unsigned char> *getData() const;
     bool sent = false;

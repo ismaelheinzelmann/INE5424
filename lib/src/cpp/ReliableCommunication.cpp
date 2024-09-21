@@ -19,6 +19,8 @@
 
 #define RETRY_DATA_ATTEMPT 4
 #define RETRY_DATA_TIMEOUT_USEC 200
+#define RETRY_DATA_TIMEOUT_USEC_MAX 800
+#define TIMEOUT_INCREMENT 200
 // clang-format off
 
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID)
@@ -71,6 +73,8 @@ bool ReliableCommunication::send(const unsigned short id,
 	}
 	// Verify if its faster to pre compute serialization
 	// TODO Pre computar o proximo?
+	int timeout = RETRY_DATA_TIMEOUT_USEC;
+	int consecutiveTry = 0;
 	for (unsigned short i = 0; i < totalDatagrams; i++)
 	{
 		auto versionDatagram = Datagram();
@@ -92,6 +96,7 @@ bool ReliableCommunication::send(const unsigned short id,
 			serializedDatagram[12 + j] = checksum[j];
 		Datagram response;
 		bool versionSent = false;
+
 		for (int j = 1; j <= RETRY_DATA_ATTEMPT;)
 		{
 			versionSent = false;
@@ -103,22 +108,31 @@ bool ReliableCommunication::send(const unsigned short id,
 				j++;
 				continue;
 			}
-
 			sockaddr_in senderAddr{};
 			senderAddr.sin_family = AF_INET;
 			bool answer = Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, senderAddr,
-			                                                  RETRY_DATA_TIMEOUT_USEC*j);
+			                                                  timeout);
 			// TODO Validate if is really the right sender
 			// TODO Validate checksum
 			if (!answer)
 			{
+				timeout = std::min(RETRY_DATA_TIMEOUT_USEC_MAX, timeout * 2);
 				std::cout << "Receiver didn't respond ACK for version " << i << std::endl;
+				consecutiveTry = 0;
 				j++;
 				continue;
 			}
+			if (response.getVersion() != i + 1)
+				continue;
+			consecutiveTry++;
+
+			if (consecutiveTry == 50)
+			{
+				timeout = std::max(RETRY_DATA_TIMEOUT_USEC, timeout / 2);
+
+			}
 			if (response.isNACK())
 			{
-				if(response.getVersion() != i + 1) continue;
 				std::cout << "Receiver didn't agree with version " << response.getVersion() << std::endl;
 				j++;
 				continue;
@@ -134,12 +148,14 @@ bool ReliableCommunication::send(const unsigned short id,
 			if (response.isACK() && response.getVersion() == i + 1)
 			{
 				versionSent = true;
+				std::cout<<"Version sent " << i + 1<< " sent." <<std::endl;
 				break;
 			}
 			if (response.isFIN())
 				return false;
 		}
-		if (!versionSent){
+		if (!versionSent)
+		{
 			break;
 		}
 	}

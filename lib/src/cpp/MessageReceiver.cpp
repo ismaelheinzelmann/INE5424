@@ -2,6 +2,7 @@
 
 #include <Request.h>
 #include <cassert>
+#include <iostream>
 
 #include "../header/Datagram.h"
 #include <map>
@@ -24,21 +25,20 @@ bool MessageReceiver::verifyMessage(Request *request)
 }
 
 bool returnTrueWithProbability(int n) {
-	// Ensure n is between 0 and 100
 	if (n < 0 || n > 100) {
 		throw std::invalid_argument("Probability must be between 0 and 100.");
 	}
-
-	// Generate a random number between 0 and 99
 	int randomValue = std::rand() % 100;
-
-	// Return true if randomValue is less than n
 	return randomValue < n;
 }
 
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	if (!returnTrueWithProbability(99)) return;
+	if (!returnTrueWithProbability(99))
+	{
+	std::cerr<<"MISSED PACKAGE" <<std::endl;
+		return;
+	}
 	// if (!verifyMessage(request))
 	// {
 	// 	sendDatagramNACK(request, socketfd);
@@ -79,6 +79,8 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 	request->clientRequest->sin_port = request->datagram->getSourcePort();
 	std::shared_lock lock(messagesMutex);
 	Message *message = getMessage(request->clientRequest);
+	lock.unlock();
+	std::lock_guard messageLock(messagesMutex);
 	if (message == nullptr)
 	{
 		sendDatagramFIN(request, socketfd);
@@ -87,13 +89,11 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 
 	if (message->verifyMessage(*(request->datagram)))
 	{
-		bool sent = message->addData(request->datagram->getData());
+		bool sent = message->addData(request->datagram);
 		if (sent)
 		{
 			sendDatagramFINACK(request, socketfd);
-			if (message->delivered) return;
-			messageQueue->push(message->getData());
-			message->delivered = true;
+			if (!message->delivered) messageQueue->push(message->getData());
 			return;
 		}
 		sendDatagramACK(request, socketfd);
