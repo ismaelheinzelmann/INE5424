@@ -55,10 +55,7 @@ ReliableCommunication::~ReliableCommunication()
 bool ReliableCommunication::send(const unsigned short id,
                                  const std::vector<unsigned char> &data)
 {
-	if (this->configMap.find(id) == this->configMap.end())
-	{
-		throw std::runtime_error("Invalid ID.");
-	}
+	if (this->configMap.find(id) == this->configMap.end()) return false;
 	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(data.size());
@@ -70,8 +67,6 @@ bool ReliableCommunication::send(const unsigned short id,
 	{
 		return false;
 	}
-	// Verify if its faster to pre compute serialization
-	// TODO Pre computar o proximo?
 	int timeout = RETRY_DATA_TIMEOUT_USEC;
 	int consecutiveTry = 0;
 	for (unsigned short i = 0; i < totalDatagrams; i++)
@@ -144,7 +139,6 @@ bool ReliableCommunication::send(const unsigned short id,
 			if (response.isACK() && response.getVersion() == i + 1)
 			{
 				versionSent = true;
-				// std::cout<<"Version sent " << i + 1<< " sent." <<std::endl;
 				break;
 			}
 			if (response.isFIN())
@@ -155,7 +149,6 @@ bool ReliableCommunication::send(const unsigned short id,
 			break;
 		}
 	}
-	// std::cout << "Failed sending message" << std::endl;
 	close(transientSocketFd.first);
 	return false;
 }
@@ -252,7 +245,7 @@ void ReliableCommunication::stop()
 	delete handler;
 }
 
-std::vector<unsigned char> *ReliableCommunication::receive()
+std::vector<unsigned char> ReliableCommunication::receive()
 {
 	return messageQueue.pop();
 }

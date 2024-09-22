@@ -14,17 +14,24 @@ Message::Message(unsigned short totalDatagrams)
 
 Message::~Message()
 {
-	if (!delivered)
+	if (delivered)
 	{
 		delete data;
 	}
 }
 
+std::mutex *Message::getMutex()
+{
+	return &messageMutex;
+}
+
 //Adds data to the message. Returns true if ended the receive.
 bool Message::addData(Datagram *datagram)
 {
-	if (datagram->getVersion() <= lastVersionReceived) return false;
-	if (sent || delivered) return true;
+	if (datagram->getVersion() <= lastVersionReceived)
+		return false;
+	if (sent || delivered)
+		return true;
 	this->data->insert(this->data->end(), datagram->getData()->begin(), datagram->getData()->end());
 	incrementVersion();
 	lastUpdate = std::chrono::system_clock::now();

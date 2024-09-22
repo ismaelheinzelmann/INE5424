@@ -2,6 +2,7 @@
 #include <chrono>
 #include "Datagram.h"
 #include <vector>
+#include <mutex>
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
@@ -12,6 +13,7 @@ public:
     ~Message();
     bool addData(Datagram *datagram);
     bool verifyMessage(Datagram& datagram) const;
+    std::mutex * getMutex();
     std::chrono::system_clock::time_point getLastUpdate();
     std::vector<unsigned char> *getData() const;
     bool sent = false;
@@ -23,6 +25,7 @@ private:
     std::vector<unsigned char> *data;
     unsigned short lastVersionReceived;
     unsigned short totalDatagrams;
+    std::mutex messageMutex;
 };
 
 

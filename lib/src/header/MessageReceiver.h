@@ -16,7 +16,7 @@
 class MessageReceiver
 {
 public:
-    MessageReceiver(BlockingQueue<std::vector<unsigned char> *>* messageQueue, BlockingQueue<Request *>* requestQueue);
+    MessageReceiver(BlockingQueue<std::vector<unsigned char>>* messageQueue, BlockingQueue<Request *>* requestQueue);
     static bool verifyMessage(Request* request);
     ~MessageReceiver() = default;
     void handleMessage(Request *request, int socketfd);
@@ -26,7 +26,7 @@ public:
 private:
     std::map<std::pair<in_addr_t, in_port_t>, Message*> messages;
     std::shared_mutex messagesMutex;
-    BlockingQueue<std::vector<unsigned char>*> *messageQueue;
+    BlockingQueue<std::vector<unsigned char>> *messageQueue;
     BlockingQueue<Request*> *requestQueue;
 
     std::thread cleanseThread;

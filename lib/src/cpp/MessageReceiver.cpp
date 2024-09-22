@@ -10,7 +10,7 @@
 #include "../header/Protocol.h"
 #include "../header/BlockingQueue.h"
 
-MessageReceiver::MessageReceiver(BlockingQueue<std::vector<unsigned char> *> *messageQueue,
+MessageReceiver::MessageReceiver(BlockingQueue<std::vector<unsigned char>> *messageQueue,
                                  BlockingQueue<Request *> *requestQueue)
 {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
@@ -29,19 +29,23 @@ void MessageReceiver::cleanse()
 	{
 		{
 			std::lock_guard messagesLock(messagesMutex);
-			for (auto [pair, message] : this->messages)
+			for (auto it = this->messages.begin(); it != this->messages.end();)
 			{
-				if (message->getLastUpdate() - std::chrono::system_clock::now() > std::chrono::seconds(10))
+				auto &[pair, message] = *it;
+				if (std::chrono::system_clock::now() - message->getLastUpdate() > std::chrono::seconds(10))
 				{
 					delete message;
-					messages.erase(pair);
+					it = messages.erase(it);
+				}
+				else
+				{
+					++it;
 				}
 			}
 		}
 
 		std::this_thread::sleep_for(std::chrono::seconds(10));
 	}
-	// Scope because lock guard is by scope
 }
 
 
@@ -50,8 +54,10 @@ bool MessageReceiver::verifyMessage(Request *request)
 	return Protocol::verifyChecksum(request->datagram, request->data);
 }
 
-bool returnTrueWithProbability(int n) {
-	if (n < 0 || n > 100) {
+bool returnTrueWithProbability(int n)
+{
+	if (n < 0 || n > 100)
+	{
 		throw std::invalid_argument("Probability must be between 0 and 100.");
 	}
 	int randomValue = std::rand() % 100;
@@ -60,9 +66,13 @@ bool returnTrueWithProbability(int n) {
 
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	if (!returnTrueWithProbability(99))
+	if (!returnTrueWithProbability(97))
 	{
-	std::cerr<<"MISSED PACKAGE" <<std::endl;
+		std::cerr << "MISSED PACKAGE" << std::endl;
+		delete request->datagram;
+		delete request->data;
+		delete request->clientRequest;
+		delete request;
 		return;
 	}
 	// if (!verifyMessage(request))
@@ -103,41 +113,37 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd)
 void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 {
 	request->clientRequest->sin_port = request->datagram->getSourcePort();
-	Message *message;
+	std::shared_lock lock(messagesMutex);
+	Message *message = getMessage(request->clientRequest);
+	if (message == nullptr)
 	{
-		std::shared_lock lock(messagesMutex);
-		message = getMessage(request->clientRequest);
+		sendDatagramFIN(request, socketfd);
+		return;
 	}
+	std::lock_guard messageLock(*message->getMutex());
+
+	if (message->delivered)
 	{
-		std::lock_guard messageLock(messagesMutex);
-		if (message == nullptr)
-		{
-			sendDatagramFIN(request, socketfd);
-			return;
-		}
-
-
-		if (message->verifyMessage(*(request->datagram)))
-		{
-			bool sent = message->addData(request->datagram);
-			if (sent)
-			{
-				sendDatagramFINACK(request, socketfd);
-				if (!message->delivered) messageQueue->push(message->getData());
-				return;
-			}
-			sendDatagramACK(request, socketfd);
-		}
-		else
-		{
-			sendDatagramNACK(request, socketfd);
-		}
+		sendDatagramFINACK(request, socketfd);
+		return;
 	}
-	delete request->datagram;
-	delete request->data;
-	delete request->clientRequest;
-	delete request;
-
+	if (!message->verifyMessage(*(request->datagram)))
+	{
+		sendDatagramNACK(request, socketfd);
+		return;
+	}
+	bool sent = message->addData(request->datagram);
+	if (sent)
+	{
+		sendDatagramFINACK(request, socketfd);
+		if (!message->delivered)
+		{
+			message->delivered = true;
+			messageQueue->push(*message->getData());
+		}
+		return;
+	}
+	sendDatagramACK(request, socketfd);
 }
 
 

@@ -35,7 +35,7 @@ public:
 	void listen();
 	void processDatagram();
 	void processDatagram(Datagram* datagram, sockaddr_in* senderAddr) const;
-	std::vector<unsigned char>* receive();
+	std::vector<unsigned char> receive();
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 
 private:
@@ -43,7 +43,7 @@ private:
 	unsigned short id;
 	MessageReceiver* handler;
 	std::map<unsigned short, sockaddr_in> configMap;
-	BlockingQueue<std::vector<unsigned char>*> messageQueue;
+	BlockingQueue<std::vector<unsigned char>> messageQueue;
 	BlockingQueue<Request*> requestQueue;
 	bool verifyOrigin(sockaddr_in* senderAddr);
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);
