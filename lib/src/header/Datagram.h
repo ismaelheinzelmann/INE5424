@@ -40,11 +40,13 @@ public:
 	bool isSYN(); // Second bit
 	bool isNACK(); // Third bit
 	bool isFIN();
-
+	bool isEND();
 	void setIsACK();
 	void setIsSYN();
 	void setIsNACK();
 	void setIsFIN();
+	void setIsEND();
+
 
 	bool isBitSet(unsigned short value, int bitPosition);
 	unsigned short setBit(unsigned short value, int bitPosition);

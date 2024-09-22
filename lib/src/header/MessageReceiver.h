@@ -8,6 +8,8 @@
 #include <map>
 #include <vector>
 #include <shared_mutex>
+#include <thread>
+
 #include "Request.h"
 
 // Thread that verifies every N seconds and remove requisitions that timedout;
@@ -24,9 +26,10 @@ public:
 private:
     std::map<std::pair<in_addr_t, in_port_t>, Message*> messages;
     std::shared_mutex messagesMutex;
-
     BlockingQueue<std::vector<unsigned char>*> *messageQueue;
     BlockingQueue<Request*> *requestQueue;
+
+    std::thread cleanseThread;
 
 
     static std::pair<in_addr_t, in_port_t> getIdentifier(sockaddr_in* from);
@@ -36,6 +39,8 @@ private:
     static bool sendDatagramNACK(Request* request, int socketfd);
     static bool sendDatagramFINACK(Request* request, int socketfd);
     static bool sendDatagramFIN(Request* request, int socketfd);
+    void cleanse();
+
 
 };
 

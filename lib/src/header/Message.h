@@ -12,6 +12,7 @@ public:
     ~Message();
     bool addData(Datagram *datagram);
     bool verifyMessage(Datagram& datagram) const;
+    std::chrono::system_clock::time_point getLastUpdate();
     std::vector<unsigned char> *getData() const;
     bool sent = false;
     bool delivered = false;

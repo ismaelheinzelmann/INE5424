@@ -6,6 +6,7 @@ struct Flags {
 	bool NACK = false;
 	bool SYN = false;
 	bool FIN = false;
+	bool END = false;
 };
 
 #endif //FLAGS_H

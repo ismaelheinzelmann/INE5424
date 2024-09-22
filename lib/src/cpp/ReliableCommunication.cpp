@@ -60,7 +60,6 @@ bool ReliableCommunication::send(const unsigned short id,
 		throw std::runtime_error("Invalid ID.");
 	}
 	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
-
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(data.size());
 	datagram.setDatagramTotal(totalDatagrams);
@@ -104,7 +103,7 @@ bool ReliableCommunication::send(const unsigned short id,
 			                             reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
 			if (bytes < 0)
 			{
-				std::cout << "Failed sending datagram." << std::endl;
+				// std::cout << "Failed sending datagram." << std::endl;
 				j++;
 				continue;
 			}
@@ -117,7 +116,6 @@ bool ReliableCommunication::send(const unsigned short id,
 			if (!answer)
 			{
 				timeout = std::min(RETRY_DATA_TIMEOUT_USEC_MAX, timeout * 2);
-				std::cout << "Receiver didn't respond ACK for version " << i << std::endl;
 				consecutiveTry = 0;
 				j++;
 				continue;
@@ -133,14 +131,12 @@ bool ReliableCommunication::send(const unsigned short id,
 			}
 			if (response.isNACK())
 			{
-				std::cout << "Receiver didn't agree with version " << response.getVersion() << std::endl;
 				j++;
 				continue;
 			}
 
 			if (response.getVersion() == totalDatagrams && response.isACK() && response.isFIN())
 			{
-				std::cout << "Receiver ended the connection, message successfully sent." << std::endl;
 				close(transientSocketFd.first);
 				versionSent = true;
 				return true;
@@ -148,7 +144,7 @@ bool ReliableCommunication::send(const unsigned short id,
 			if (response.isACK() && response.getVersion() == i + 1)
 			{
 				versionSent = true;
-				std::cout<<"Version sent " << i + 1<< " sent." <<std::endl;
+				// std::cout<<"Version sent " << i + 1<< " sent." <<std::endl;
 				break;
 			}
 			if (response.isFIN())
@@ -159,7 +155,7 @@ bool ReliableCommunication::send(const unsigned short id,
 			break;
 		}
 	}
-	std::cout << "Failed sending message" << std::endl;
+	// std::cout << "Failed sending message" << std::endl;
 	close(transientSocketFd.first);
 	return false;
 }
@@ -213,7 +209,7 @@ bool ReliableCommunication::sendAttempt(int socketfd, sockaddr_in &destin, std::
 
 void ReliableCommunication::listen()
 {
-	std::thread processingThread([this]
+	processingThread = std::thread([this]
 	{
 		processDatagram();
 	});
@@ -233,15 +229,32 @@ void ReliableCommunication::processDatagram()
 		{
 			continue;
 		}
+		if (datagram->isEND() && senderAddr->sin_family == this->configMap[id].sin_family &&
+			senderAddr->sin_port == this->configMap[id].sin_port &&
+			senderAddr->sin_addr.s_addr == this->configMap[id].sin_addr.s_addr)
+			break;
 		senderAddr->sin_family = AF_INET;
 		auto request = new Request{buffer, senderAddr, datagram};
 		handler->handleMessage(request, this->socketInfo);
 	}
 }
 
+void ReliableCommunication::stop()
+{
+	auto endDatagram = Datagram();
+	auto flags = Flags{};
+	flags.END = true;
+	Protocol::sendDatagram(&endDatagram, &configMap[id], socketInfo, &flags);
+	if (processingThread.joinable())
+	{
+		processingThread.join();
+	}
+	delete handler;
+}
+
 std::vector<unsigned char> *ReliableCommunication::receive()
 {
-	return messageQueue.pop();;
+	return messageQueue.pop();
 }
 
 void ReliableCommunication::printNodes(std::mutex *printLock) const
@@ -258,19 +271,6 @@ unsigned short ReliableCommunication::calculateTotalDatagrams(unsigned int dataL
 	return static_cast<int>(ceil(result));
 }
 
-
-void ReliableCommunication::receiveAndPrint(std::mutex *lock)
-{
-	while (true)
-	{
-		auto message = receive();
-		std::string messageString(message->begin(), message->end());
-		lock->lock();
-		lock->lock();
-		std::cout << messageString << std::endl;
-		lock->unlock();
-	}
-}
 
 bool ReliableCommunication::verifyOrigin(sockaddr_in *senderAddr)
 {
@@ -289,7 +289,6 @@ std::pair<int, sockaddr_in> ReliableCommunication::createUDPSocketAndGetPort()
 	sockaddr_in addr{};
 	socklen_t addr_len = sizeof(addr);
 
-	// Create a UDP socket
 	int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (sockfd < 0)
 	{
@@ -297,13 +296,11 @@ std::pair<int, sockaddr_in> ReliableCommunication::createUDPSocketAndGetPort()
 		throw std::runtime_error("Failed to create socket");
 	}
 
-	// Prepare sockaddr_in structure for a dummy bind
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(0); // Let the system choose an available port
+	addr.sin_port = htons(0);
 
-	// Bind the socket to get an available port (dummy bind)
 	if (bind(sockfd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0)
 	{
 		perror("bind");
@@ -311,7 +308,6 @@ std::pair<int, sockaddr_in> ReliableCommunication::createUDPSocketAndGetPort()
 		throw std::runtime_error("Failed to bind socket");
 	}
 
-	// Retrieve the assigned port
 	if (getsockname(sockfd, reinterpret_cast<struct sockaddr *>(&addr), &addr_len) < 0)
 	{
 		perror("getsockname");
@@ -319,7 +315,6 @@ std::pair<int, sockaddr_in> ReliableCommunication::createUDPSocketAndGetPort()
 		throw std::runtime_error("Failed to get socket name");
 	}
 
-	// Return the file descriptor and the address
 	return {sockfd, addr};
 }
 

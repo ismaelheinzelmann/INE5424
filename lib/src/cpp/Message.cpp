@@ -61,4 +61,10 @@ bool Message::verifyMessage(Datagram &datagram) const
 void Message::incrementVersion()
 {
 	lastVersionReceived++;
+	lastUpdate = std::chrono::system_clock::now();
+}
+
+std::chrono::system_clock::time_point Message::getLastUpdate()
+{
+	return lastUpdate;
 }

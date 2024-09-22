@@ -16,6 +16,32 @@ MessageReceiver::MessageReceiver(BlockingQueue<std::vector<unsigned char> *> *me
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
 	this->requestQueue = requestQueue;
+	cleanseThread = std::thread([this]
+	{
+		cleanse();
+	});
+	cleanseThread.detach();
+}
+
+void MessageReceiver::cleanse()
+{
+	while (true)
+	{
+		{
+			std::lock_guard messagesLock(messagesMutex);
+			for (auto [pair, message] : this->messages)
+			{
+				if (message->getLastUpdate() - std::chrono::system_clock::now() > std::chrono::seconds(10))
+				{
+					delete message;
+					messages.erase(pair);
+				}
+			}
+		}
+
+		std::this_thread::sleep_for(std::chrono::seconds(10));
+	}
+	// Scope because lock guard is by scope
 }
 
 
@@ -77,31 +103,41 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd)
 void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 {
 	request->clientRequest->sin_port = request->datagram->getSourcePort();
-	std::shared_lock lock(messagesMutex);
-	Message *message = getMessage(request->clientRequest);
-	lock.unlock();
-	std::lock_guard messageLock(messagesMutex);
-	if (message == nullptr)
+	Message *message;
 	{
-		sendDatagramFIN(request, socketfd);
+		std::shared_lock lock(messagesMutex);
+		message = getMessage(request->clientRequest);
 	}
-	assert(message != nullptr);
-
-	if (message->verifyMessage(*(request->datagram)))
 	{
-		bool sent = message->addData(request->datagram);
-		if (sent)
+		std::lock_guard messageLock(messagesMutex);
+		if (message == nullptr)
 		{
-			sendDatagramFINACK(request, socketfd);
-			if (!message->delivered) messageQueue->push(message->getData());
+			sendDatagramFIN(request, socketfd);
 			return;
 		}
-		sendDatagramACK(request, socketfd);
+
+
+		if (message->verifyMessage(*(request->datagram)))
+		{
+			bool sent = message->addData(request->datagram);
+			if (sent)
+			{
+				sendDatagramFINACK(request, socketfd);
+				if (!message->delivered) messageQueue->push(message->getData());
+				return;
+			}
+			sendDatagramACK(request, socketfd);
+		}
+		else
+		{
+			sendDatagramNACK(request, socketfd);
+		}
 	}
-	else
-	{
-		sendDatagramNACK(request, socketfd);
-	}
+	delete request->datagram;
+	delete request->data;
+	delete request->clientRequest;
+	delete request;
+
 }
 
 

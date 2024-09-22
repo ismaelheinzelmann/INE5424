@@ -122,6 +122,12 @@ bool Datagram::isFIN()
 	return this->isBitSet(this->getFlags(), 3);
 }
 
+bool Datagram::isEND()
+{
+	return this->isBitSet(this->getFlags(), 10);
+}
+
+
 void Datagram::setIsACK()
 {
 	this->setFlags(this->setBit(this->getFlags(), 0));
@@ -140,6 +146,11 @@ void Datagram::setIsNACK()
 void Datagram::setIsFIN()
 {
 	this->setFlags(this->setBit(this->getFlags(), 3));
+}
+
+void Datagram::setIsEND()
+{
+	this->setFlags(this->setBit(this->getFlags(), 10));
 }
 
 
