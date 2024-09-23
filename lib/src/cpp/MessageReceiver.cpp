@@ -72,7 +72,6 @@ void MessageReceiver::cleanse()
 				}
 			}
 		}
-
 	}
 }
 

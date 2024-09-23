@@ -28,6 +28,7 @@ public:
 private:
 	int socketInfo;
 	unsigned short id;
+	bool process = true;
 	MessageReceiver* handler;
 	std::map<unsigned short, sockaddr_in> configMap;
 	BlockingQueue<std::pair<bool,std::vector<unsigned char>>> messageQueue;

@@ -57,6 +57,7 @@ void ReliableCommunication::stop()
 	auto flags = Flags{};
 	flags.END = true;
 	Protocol::sendDatagram(&endDatagram, &configMap[id], socketInfo, &flags);
+	while (process) std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	if(processingThread.joinable())
 	{
 		processingThread.join();
@@ -154,8 +155,11 @@ bool ReliableCommunication::send(const unsigned short id,
 				break;
 			}
 			if (response.isFIN())
+			{
 				close(transientSocketFd.first);
 				return false;
+			}
+
 		}
 		if (!versionSent)
 		{
@@ -239,6 +243,7 @@ void ReliableCommunication::processDatagram()
 			senderAddr.sin_port == this->configMap[id].sin_port &&
 			senderAddr.sin_addr.s_addr == this->configMap[id].sin_addr.s_addr)
 		{
+			process = false;
 			return;
 		}
 		senderAddr.sin_family = AF_INET;
