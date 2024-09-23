@@ -14,10 +14,7 @@ Message::Message(unsigned short totalDatagrams)
 
 Message::~Message()
 {
-	if (delivered)
-	{
-		delete data;
-	}
+	delete data;
 }
 
 std::mutex *Message::getMutex()

@@ -49,6 +49,19 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 ReliableCommunication::~ReliableCommunication()
 {
 	close(socketInfo);
+}
+
+void ReliableCommunication::stop()
+{
+	auto endDatagram = Datagram();
+	auto flags = Flags{};
+	flags.END = true;
+	Protocol::sendDatagram(&endDatagram, &configMap[id], socketInfo, &flags);
+	if(processingThread.joinable())
+	{
+		processingThread.join();
+	}
+
 	delete handler;
 }
 
@@ -133,7 +146,6 @@ bool ReliableCommunication::send(const unsigned short id,
 			if (response.getVersion() == totalDatagrams && response.isACK() && response.isFIN())
 			{
 				close(transientSocketFd.first);
-				versionSent = true;
 				return true;
 			}
 			if (response.isACK() && response.getVersion() == i + 1)
@@ -142,6 +154,7 @@ bool ReliableCommunication::send(const unsigned short id,
 				break;
 			}
 			if (response.isFIN())
+				close(transientSocketFd.first);
 				return false;
 		}
 		if (!versionSent)
@@ -213,39 +226,30 @@ void ReliableCommunication::processDatagram()
 {
 	while (true)
 	{
-		const auto datagram = new Datagram();
-		const auto senderAddr = new sockaddr_in{};
-		const auto buffer = new std::vector<unsigned char>(1040);
-		Protocol::readDatagramSocket(datagram, socketInfo, senderAddr, buffer);
+		auto datagram = Datagram();
+		auto senderAddr = sockaddr_in{};
+		auto buffer = std::vector<unsigned char>(1040);
+		Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer);
 
-		if (!verifyOrigin(senderAddr))
+		if (!verifyOrigin(&senderAddr))
 		{
 			continue;
 		}
-		if (datagram->isEND() && senderAddr->sin_family == this->configMap[id].sin_family &&
-			senderAddr->sin_port == this->configMap[id].sin_port &&
-			senderAddr->sin_addr.s_addr == this->configMap[id].sin_addr.s_addr)
-			break;
-		senderAddr->sin_family = AF_INET;
-		auto request = new Request{buffer, senderAddr, datagram};
-		handler->handleMessage(request, this->socketInfo);
+		if (datagram.isEND() && senderAddr.sin_family == this->configMap[id].sin_family &&
+			senderAddr.sin_port == this->configMap[id].sin_port &&
+			senderAddr.sin_addr.s_addr == this->configMap[id].sin_addr.s_addr)
+		{
+			return;
+		}
+		senderAddr.sin_family = AF_INET;
+		auto request = Request{&buffer, &senderAddr, &datagram};
+		handler->handleMessage(&request, this->socketInfo);
 	}
 }
 
-void ReliableCommunication::stop()
-{
-	auto endDatagram = Datagram();
-	auto flags = Flags{};
-	flags.END = true;
-	Protocol::sendDatagram(&endDatagram, &configMap[id], socketInfo, &flags);
-	if (processingThread.joinable())
-	{
-		processingThread.join();
-	}
-	delete handler;
-}
 
-std::vector<unsigned char> ReliableCommunication::receive()
+
+std::pair<bool,std::vector<unsigned char>> ReliableCommunication::receive()
 {
 	return messageQueue.pop();
 }

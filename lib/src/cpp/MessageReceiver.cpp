@@ -10,7 +10,7 @@
 #include "../header/Protocol.h"
 #include "../header/BlockingQueue.h"
 
-MessageReceiver::MessageReceiver(BlockingQueue<std::vector<unsigned char>> *messageQueue,
+MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
                                  BlockingQueue<Request *> *requestQueue)
 {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
@@ -23,10 +23,38 @@ MessageReceiver::MessageReceiver(BlockingQueue<std::vector<unsigned char>> *mess
 	cleanseThread.detach();
 }
 
+MessageReceiver::~MessageReceiver()
+{
+	{
+		std::lock_guard lock(mtx);
+		running = false;
+	}
+	messageQueue->push(std::make_pair(false, std::vector<unsigned char>()));
+	running = false;
+	cv.notify_all();
+	if (cleanseThread.joinable()) cleanseThread.join();
+	std::lock_guard messagesLock(messagesMutex);
+	for (auto it = this->messages.begin(); it != this->messages.end();)
+	{
+		auto &[pair, message] = *it;
+		{
+			std::lock_guard messageLock(*message->getMutex());
+			delete message;  // Clean up the memory
+		}
+		it = messages.erase(it); // Update it with the result of erase
+	}
+}
+
 void MessageReceiver::cleanse()
 {
 	while (true)
 	{
+		{
+			std::unique_lock lock(mtx);
+			if (cv.wait_for(lock, std::chrono::seconds(10), [this] { return !running; })) {
+				return;
+			}
+		}
 		{
 			std::lock_guard messagesLock(messagesMutex);
 			for (auto it = this->messages.begin(); it != this->messages.end();)
@@ -34,6 +62,7 @@ void MessageReceiver::cleanse()
 				auto &[pair, message] = *it;
 				if (std::chrono::system_clock::now() - message->getLastUpdate() > std::chrono::seconds(10))
 				{
+					std::lock_guard messageLock(*message->getMutex());
 					delete message;
 					it = messages.erase(it);
 				}
@@ -44,7 +73,6 @@ void MessageReceiver::cleanse()
 			}
 		}
 
-		std::this_thread::sleep_for(std::chrono::seconds(10));
 	}
 }
 
@@ -69,10 +97,6 @@ void MessageReceiver::handleMessage(Request *request, int socketfd)
 	if (!returnTrueWithProbability(97))
 	{
 		std::cerr << "MISSED PACKAGE" << std::endl;
-		delete request->datagram;
-		delete request->data;
-		delete request->clientRequest;
-		delete request;
 		return;
 	}
 	// if (!verifyMessage(request))
@@ -89,11 +113,7 @@ void MessageReceiver::handleMessage(Request *request, int socketfd)
 	{
 		handleDataMessage(request, socketfd);
 	}
-	// }
-	delete request->datagram;
-	delete request->data;
-	delete request->clientRequest;
-	delete request;
+
 }
 
 
@@ -139,7 +159,7 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 		if (!message->delivered)
 		{
 			message->delivered = true;
-			messageQueue->push(*message->getData());
+			messageQueue->push(std::make_pair(true, *message->getData()));
 		}
 		return;
 	}

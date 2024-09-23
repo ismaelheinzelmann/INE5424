@@ -1,6 +1,8 @@
 #pragma once
 #ifndef MESSAGEHANDLER_H
 #define MESSAGEHANDLER_H
+#include <condition_variable>
+
 #include "BlockingQueue.h"
 
 #include "Datagram.h"
@@ -16,22 +18,26 @@
 class MessageReceiver
 {
 public:
-    MessageReceiver(BlockingQueue<std::vector<unsigned char>>* messageQueue, BlockingQueue<Request *>* requestQueue);
-    static bool verifyMessage(Request* request);
-    ~MessageReceiver() = default;
+    MessageReceiver(BlockingQueue<std::pair<bool,std::vector<unsigned char>>>* messageQueue, BlockingQueue<Request *>* requestQueue);
+    ~MessageReceiver();
+    void stop();
     void handleMessage(Request *request, int socketfd);
-    void handleFirstMessage(Request* request, int socketfd);
-    void handleDataMessage(Request* request, int socketfd);
 
 private:
     std::map<std::pair<in_addr_t, in_port_t>, Message*> messages;
     std::shared_mutex messagesMutex;
-    BlockingQueue<std::vector<unsigned char>> *messageQueue;
+    BlockingQueue<std::pair<bool,std::vector<unsigned char>>> *messageQueue;
     BlockingQueue<Request*> *requestQueue;
-
     std::thread cleanseThread;
 
+    // Cleanse
+    std::condition_variable cv;
+    std::mutex mtx;
+    std::atomic<bool> running{true};
 
+    void handleFirstMessage(Request* request, int socketfd);
+    void handleDataMessage(Request* request, int socketfd);
+    static bool verifyMessage(Request* request);
     static std::pair<in_addr_t, in_port_t> getIdentifier(sockaddr_in* from);
     static bool sendDatagramSYNACK(Datagram* datagram, sockaddr_in* from, int socketfd);
     Message* getMessage(sockaddr_in* from);

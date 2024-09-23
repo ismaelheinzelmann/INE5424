@@ -200,5 +200,6 @@ void Protocol::setFlags(Datagram *datagram, Flags *flags)
 	if (flags->NACK) datagram->setIsNACK();
 	if (flags->SYN) datagram->setIsSYN();
 	if (flags->FIN) datagram->setIsFIN();
+	if (flags->END) datagram->setIsEND();
 }
 

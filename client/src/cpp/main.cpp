@@ -12,14 +12,14 @@ void print(ReliableCommunication &rb)
 {
 	while (g_running)
 	{
-		std::vector<unsigned char> receivedMessage = rb.receive();
-
+		auto receivedMessage = rb.receive();
+		if (!receivedMessage.first) break;
 		// Lock the mutex only after receiving the message
 		{
 			std::lock_guard guard(g_lock);
 			// std::string message(receivedMessage->begin(), receivedMessage->end());
 			// TODO: Modify response in the future to show who sent the message
-			std::cout << "Received message: " << receivedMessage.size() << " bytes of size" << std::endl;
+			std::cout << "Received message: " << receivedMessage.second.size() << " bytes of size" << std::endl;
 		}
 	}
 }
