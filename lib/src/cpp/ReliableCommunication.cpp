@@ -98,10 +98,7 @@ bool ReliableCommunication::send(const unsigned short id,
 		}
 		versionDatagram.setDataLength(versionDatagram.getData()->size());
 		auto serializedDatagram = Protocol::serialize(&versionDatagram);
-		unsigned char checksum[4] = {0, 0, 0, 0};
-		// TypeUtils::uintToBytes(Protocol::computeChecksum(&serializedDatagram), checksum);
-		for (unsigned short j = 0; j < 4; j++)
-			serializedDatagram[12 + j] = checksum[j];
+		Protocol::setChecksum(&serializedDatagram);
 		Datagram response;
 		bool versionSent = false;
 
@@ -234,7 +231,7 @@ void ReliableCommunication::processDatagram()
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1040);
 		Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer);
-
+		buffer.resize(16 + datagram.getDataLength());
 		if (!verifyOrigin(&senderAddr))
 		{
 			continue;

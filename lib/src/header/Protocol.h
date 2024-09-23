@@ -26,6 +26,7 @@ public:
 	static bool sendSYN(Datagram* datagram, sockaddr_in* to, int socketfd);
 	static bool sendDatagram(Datagram* datagram, sockaddr_in* to, int socketfd, Flags* flags);
 	static void setFlags(Datagram* datagram, Flags* flags);
+	static unsigned int sumChecksum32(const std::vector<unsigned char>* data);
 
 
 private:

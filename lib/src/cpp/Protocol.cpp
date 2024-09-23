@@ -1,5 +1,4 @@
 #include "../header/Protocol.h"
-#include "../header/CRC32.h"
 #include "TypeUtils.h"
 #include <iostream>
 #include <sys/socket.h>
@@ -49,8 +48,11 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram)
 
 void Protocol::setChecksum(std::vector<unsigned char> *data)
 {
-	auto checksum = computeChecksum(data);
-	memcpy(data->data() + 12, &checksum, sizeof(checksum));
+	auto checksum = sumChecksum32(data);
+	(*data)[15] = static_cast<unsigned char>(checksum & 0xFF);
+	(*data)[14] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
+	(*data)[13] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
+	(*data)[12] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
 }
 
 // Deserializes data and returns a Datagram object.
@@ -70,24 +72,19 @@ Datagram Protocol::deserialize(std::vector<unsigned char> &serializedDatagram)
 // Computes the checksum of a datagram, the checksum field will be zero while computing.
 unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDatagram)
 {
-	unsigned char buff[2] = {0, 0};
-	buff[0] = serializedDatagram->at(8);
-	buff[1] = serializedDatagram->at(9);
-	auto *length = reinterpret_cast<unsigned short *>(buff);
-	auto serializedData = std::vector<unsigned char>();
-	for (int i = 0; i < 12+ (*length); ++i)
-	{
-		serializedData.push_back(serializedDatagram->at(i));
+	(*serializedDatagram)[12] = 0;
+	(*serializedDatagram)[13] = 0;
+	(*serializedDatagram)[14] = 0;
+	(*serializedDatagram)[15] = 0;
+	return sumChecksum32(serializedDatagram);
+}
+
+unsigned int Protocol::sumChecksum32(const std::vector<unsigned char>* data) {
+	unsigned int sum = 0;
+	for (unsigned char byte : *data) {
+		sum += byte;
 	}
-	for (int i = 0; i < 4; ++i)
-	{
-		serializedData.push_back(0);
-	}
-	for (unsigned int i = 0; i < (*length); i++)
-	{
-		serializedData.push_back(serializedData[i]+16);
-	}
-	return CRC32::calculate(serializedData);
+	return sum;
 }
 
 bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram)
@@ -188,7 +185,8 @@ bool Protocol::sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, F
 {
 	// if (randomReturnPercent()) return true;
 	setFlags(datagram, flags);
-	const auto serializedDatagram = serialize(datagram);
+	auto serializedDatagram = serialize(datagram);
+	setChecksum(&serializedDatagram);
 	const ssize_t bytes = sendto(socketfd, serializedDatagram.data(), serializedDatagram.size(), 0,
 	                             reinterpret_cast<struct sockaddr *>(to), sizeof(*to));
 	return bytes == static_cast<ssize_t>(serializedDatagram.size());

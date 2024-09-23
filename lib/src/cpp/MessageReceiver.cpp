@@ -93,15 +93,16 @@ bool returnTrueWithProbability(int n)
 
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	if (!returnTrueWithProbability(97))
+	// if (!returnTrueWithProbability(100))
+	// {
+	// 	std::cerr << "MISSED PACKAGE" << std::endl;
+	// 	return;
+	// }
+	if (!verifyMessage(request))
 	{
-		std::cerr << "MISSED PACKAGE" << std::endl;
+		sendDatagramNACK(request, socketfd);
 		return;
 	}
-	// if (!verifyMessage(request))
-	// {
-	// 	sendDatagramNACK(request, socketfd);
-	// }
 	if ((request->datagram->isACK() && request->datagram->isSYN()) || request->datagram->isFIN())
 		return;
 	if (request->datagram->isSYN() && !request->datagram->isACK())
