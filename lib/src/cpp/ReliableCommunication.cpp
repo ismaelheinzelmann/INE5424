@@ -1,4 +1,7 @@
 #include "../header/ReliableCommunication.h"
+
+#include <Logger.h>
+
 #include "../header/ConfigParser.h"
 #include "../header/Protocol.h"
 #include "../header/BlockingQueue.h"
@@ -13,12 +16,13 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <random>
 #include <thread>
 #define RETRY_ACK_ATTEMPT 3
 #define RETRY_ACK_TIMEOUT_USEC 200
 
-#define RETRY_DATA_ATTEMPT 4
-#define RETRY_DATA_TIMEOUT_USEC 200
+#define RETRY_DATA_ATTEMPT 7
+#define RETRY_DATA_TIMEOUT_USEC 100
 #define RETRY_DATA_TIMEOUT_USEC_MAX 800
 #define TIMEOUT_INCREMENT 200
 // clang-format off
@@ -57,8 +61,9 @@ void ReliableCommunication::stop()
 	auto flags = Flags{};
 	flags.END = true;
 	Protocol::sendDatagram(&endDatagram, &configMap[id], socketInfo, &flags);
-	while (process) std::this_thread::sleep_for(std::chrono::milliseconds(50));
-	if(processingThread.joinable())
+	while (process)
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	if (processingThread.joinable())
 	{
 		processingThread.join();
 	}
@@ -66,10 +71,26 @@ void ReliableCommunication::stop()
 	delete handler;
 }
 
+bool returnTrueWithProbability(int n)
+{
+	if (n < 0 || n > 100)
+	{
+		throw std::invalid_argument("Probability must be between 0 and 100.");
+	}
+
+	std::random_device rd; // Get a random number from hardware
+	std::mt19937 gen(rd()); // Seed the generator
+	std::uniform_int_distribution<> dis(0, 99); // Distribution in range [0, 99]
+
+	int randomValue = dis(gen); // Generate a random number
+	return randomValue < n;
+}
+
 bool ReliableCommunication::send(const unsigned short id,
                                  const std::vector<unsigned char> &data)
 {
-	if (this->configMap.find(id) == this->configMap.end()) return false;
+	if (this->configMap.find(id) == this->configMap.end())
+		return false;
 	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(data.size());
@@ -81,9 +102,10 @@ bool ReliableCommunication::send(const unsigned short id,
 	{
 		return false;
 	}
-	int timeout = RETRY_DATA_TIMEOUT_USEC;
-	int consecutiveTry = 0;
-	for (unsigned short i = 0; i < totalDatagrams; i++)
+	// Start build of datagrams
+	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams + 1);
+	auto acknowledgments = std::map<unsigned short, bool>();
+	for (int i = 0; i < totalDatagrams; ++i)
 	{
 		auto versionDatagram = Datagram();
 		versionDatagram.setSourcePort(transientSocketFd.second.sin_port);
@@ -99,66 +121,80 @@ bool ReliableCommunication::send(const unsigned short id,
 		versionDatagram.setDataLength(versionDatagram.getData()->size());
 		auto serializedDatagram = Protocol::serialize(&versionDatagram);
 		Protocol::setChecksum(&serializedDatagram);
+		datagrams[i] = serializedDatagram;
+		acknowledgments[i] = false;
+	}
+
+	unsigned short batchSize = 30;
+	unsigned short sent = 0;
+	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
+	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++)
+	{
 		Datagram response;
-		bool versionSent = false;
 
-		for (int j = 1; j <= RETRY_DATA_ATTEMPT;)
+		unsigned short batchIndex;
+		unsigned short batchSent = 0;
+		unsigned short batchAck = 0;
+		if (sent == totalDatagrams)
 		{
-			versionSent = false;
-			const ssize_t bytes = sendto(this->socketInfo, serializedDatagram.data(), serializedDatagram.size(), 0,
-			                             reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
-			if (bytes < 0)
-			{
-				// std::cout << "Failed sending datagram." << std::endl;
-				j++;
-				continue;
-			}
-			sockaddr_in senderAddr{};
-			senderAddr.sin_family = AF_INET;
-			bool answer = Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, senderAddr,
-			                                                  timeout);
-			// TODO Validate if is really the right sender
-			// TODO Validate checksum
-			if (!answer)
-			{
-				timeout = std::min(RETRY_DATA_TIMEOUT_USEC_MAX, timeout * 2);
-				consecutiveTry = 0;
-				j++;
-				continue;
-			}
-			if (response.getVersion() != i + 1)
-				continue;
-			consecutiveTry++;
-
-			if (consecutiveTry == 50)
-			{
-				timeout = std::max(RETRY_DATA_TIMEOUT_USEC, timeout / 2);
-
-			}
-			if (response.isNACK())
-			{
-				j++;
-				continue;
-			}
-
-			if (response.getVersion() == totalDatagrams && response.isACK() && response.isFIN())
-			{
-				close(transientSocketFd.first);
-				return true;
-			}
-			if (response.isACK() && response.getVersion() == i + 1)
-			{
-				versionSent = true;
-				break;
-			}
-			if (response.isFIN())
-			{
-				close(transientSocketFd.first);
-				return false;
-			}
-
+			close(transientSocketFd.first);
+			return true;
 		}
-		if (!versionSent)
+		for (int attempt = 0; attempt < RETRY_DATA_ATTEMPT; attempt++)
+		{
+			Logger::log("Attempt: " + std::to_string(attempt), LogLevel::DEBUG);
+			if (batchAck == batchSize)
+				break;
+
+			for (unsigned short j = 0; j < batchSize; j++)
+			{
+				batchIndex = batchStart * batchSize + j;
+				if (batchIndex >= totalDatagrams)
+					break;
+				if (acknowledgments[batchIndex])
+					continue;
+				if (returnTrueWithProbability(10))
+				{
+					Logger::log("Version " + std::to_string(batchIndex + 1) + " lost.", LogLevel::DEBUG);
+					batchSent++;
+					continue;
+				}
+				sendto(this->socketInfo, datagrams[batchIndex].data(),
+				       datagrams[batchIndex].size(),
+				       0,
+				       reinterpret_cast<struct sockaddr *>(&destinAddr), sizeof(destinAddr));
+
+			}
+			while (Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, destinAddr,
+			                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt))
+			{
+				if (response.getVersion()-1 < batchStart * batchSize || response.getVersion()-1 > (batchStart *
+					batchSize) + batchSize)
+				{
+					continue;
+				}
+				if (response.getVersion()-1 <= totalDatagrams && response.isACK() && !acknowledgments[response.
+					getVersion()-1])
+				{
+					std::cout << "Datagram of version " << response.getVersion() << " accepted." << std::endl;
+					acknowledgments[response.getVersion()-1] = true;
+					batchAck++;
+					sent++;
+				}
+				if (response.isACK() && response.isFIN())
+				{
+					close(transientSocketFd.first);
+					return true;
+				}
+				if (response.isFIN())
+				{
+					close(transientSocketFd.first);
+					return false;
+				}
+				if (batchAck == batchSize) break;
+			}
+		}
+		if (batchAck != batchSize)
 		{
 			break;
 		}
@@ -191,7 +227,6 @@ bool ReliableCommunication::ackAttempts(int transientSocketfd, sockaddr_in &dest
 		// if (!Protocol::verifyChecksum(response)) continue;
 		if (response.isACK() && response.isSYN() && datagram->getVersion() == response.getVersion())
 		{
-			// std::cout << "ACK Accepted." << std::endl;
 			return true;
 		}
 	}
@@ -216,6 +251,7 @@ bool ReliableCommunication::sendAttempt(int socketfd, sockaddr_in &destin, std::
 
 void ReliableCommunication::listen()
 {
+	Logger::log("Listen thread started.", LogLevel::DEBUG);
 	processingThread = std::thread([this]
 	{
 		processDatagram();
@@ -250,8 +286,7 @@ void ReliableCommunication::processDatagram()
 }
 
 
-
-std::pair<bool,std::vector<unsigned char>> ReliableCommunication::receive()
+std::pair<bool, std::vector<unsigned char>> ReliableCommunication::receive()
 {
 	return messageQueue.pop();
 }

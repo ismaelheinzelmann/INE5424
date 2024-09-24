@@ -1,5 +1,6 @@
 #include "../header/MessageReceiver.h"
 
+#include <Logger.h>
 #include <Request.h>
 #include <cassert>
 #include <iostream>
@@ -39,9 +40,9 @@ MessageReceiver::~MessageReceiver()
 		auto &[pair, message] = *it;
 		{
 			std::lock_guard messageLock(*message->getMutex());
-			delete message;  // Clean up the memory
+			delete message;
 		}
-		it = messages.erase(it); // Update it with the result of erase
+		it = messages.erase(it);
 	}
 }
 
@@ -79,16 +80,6 @@ void MessageReceiver::cleanse()
 bool MessageReceiver::verifyMessage(Request *request)
 {
 	return Protocol::verifyChecksum(request->datagram, request->data);
-}
-
-bool returnTrueWithProbability(int n)
-{
-	if (n < 0 || n > 100)
-	{
-		throw std::invalid_argument("Probability must be between 0 and 100.");
-	}
-	int randomValue = std::rand() % 100;
-	return randomValue < n;
 }
 
 void MessageReceiver::handleMessage(Request *request, int socketfd)
@@ -132,6 +123,10 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd)
 
 void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 {
+	if(request->datagram->getVersion() == 0)
+	{
+		Logger::log("SHOULD NOT BE 0 HERE", LogLevel::ERROR);
+	}
 	request->clientRequest->sin_port = request->datagram->getSourcePort();
 	std::shared_lock lock(messagesMutex);
 	Message *message = getMessage(request->clientRequest);

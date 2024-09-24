@@ -7,9 +7,12 @@
 Message::Message(unsigned short totalDatagrams)
 {
 	lastUpdate = std::chrono::system_clock::now();
-	lastVersionReceived = 0;
 	this->totalDatagrams = totalDatagrams;
-	data = new std::vector<unsigned char>();
+	data = new std::vector<unsigned char>(totalDatagrams * 1024);
+	for (int i = 1; i < totalDatagrams + 1; ++i)
+	{
+		versions[i] = false;
+	}
 }
 
 Message::~Message()
@@ -25,20 +28,35 @@ std::mutex *Message::getMutex()
 //Adds data to the message. Returns true if ended the receive.
 bool Message::addData(Datagram *datagram)
 {
-	if (datagram->getVersion() <= lastVersionReceived)
-		return false;
+	// if (datagram->getVersion() <= lastVersionReceived)
+	// 	return false;
 	if (sent || delivered)
 		return true;
-	this->data->insert(this->data->end(), datagram->getData()->begin(), datagram->getData()->end());
-	incrementVersion();
+	if (versions[datagram->getVersion()]) return false;
+	std::ranges::copy(*datagram->getData(), data->begin() + (datagram->getVersion() - 1) * 1024);
+	versions[datagram->getVersion()] = true;
+	if (datagram->getVersion() == totalDatagrams)
+	{
+		if (datagram->getData()->size() < 1024)
+		{
+			data->resize((totalDatagrams - 1) * 1024 + datagram->getData()->size());
+		}
+	}
 	lastUpdate = std::chrono::system_clock::now();
-	const bool sent = lastVersionReceived == totalDatagrams;
-	if (sent)
+	if (verifyDatagrams())
 	{
 		this->sent = true;
 		return true;
 	}
 	return false;
+}
+bool Message::verifyDatagrams()
+{
+	for (unsigned int i = 1; i <= this->totalDatagrams; i++)
+	{
+		if (!versions[i]) return false;
+	}
+	return true;
 }
 
 std::vector<unsigned char> *Message::getData() const
@@ -50,21 +68,15 @@ bool Message::verifyMessage(Datagram &datagram) const
 {
 	const unsigned short datagramVersion = datagram.getVersion();
 	// if (datagramVersion != this->lastVersionReceived && datagramVersion != lastVersionReceived + 1)
-	if (datagramVersion > lastVersionReceived + 1 || datagramVersion > totalDatagrams)
+	if (datagramVersion > totalDatagrams || datagramVersion < 1)
 	{
 		return false;
 	}
-	// if (datagramVersion == totalDatagrams &&
-	// 	datagram.getData()->size() != datagram.getDataLength())
-	// {
-	// 	return false;
-	// }
 	return true;
 }
 
 void Message::incrementVersion()
 {
-	lastVersionReceived++;
 	lastUpdate = std::chrono::system_clock::now();
 }
 

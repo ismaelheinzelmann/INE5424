@@ -1,5 +1,7 @@
 #pragma once
 #include <chrono>
+#include <map>
+
 #include "Datagram.h"
 #include <vector>
 #include <mutex>
@@ -12,6 +14,7 @@ public:
     explicit Message(unsigned short totalDatagrams);
     ~Message();
     bool addData(Datagram *datagram);
+    bool verifyDatagrams();
     bool verifyMessage(Datagram& datagram) const;
     std::mutex * getMutex();
     std::chrono::system_clock::time_point getLastUpdate();
@@ -23,9 +26,9 @@ private:
     void incrementVersion();
     std::chrono::system_clock::time_point lastUpdate;
     std::vector<unsigned char> *data;
-    unsigned short lastVersionReceived;
     unsigned short totalDatagrams;
     std::mutex messageMutex;
+    std::map<unsigned short, bool> versions;
 };
 
 
