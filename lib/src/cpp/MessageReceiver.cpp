@@ -1,5 +1,6 @@
 #include "../header/MessageReceiver.h"
 
+#include <Logger.h>
 #include <Request.h>
 #include <cassert>
 #include <iostream>
@@ -39,22 +40,26 @@ MessageReceiver::~MessageReceiver()
 		auto &[pair, message] = *it;
 		{
 			std::lock_guard messageLock(*message->getMutex());
-			delete message;  // Clean up the memory
+			delete message;
 		}
-		it = messages.erase(it); // Update it with the result of erase
+		it = messages.erase(it);
 	}
 }
 
 void MessageReceiver::cleanse()
 {
+	Logger::log("Cleanse thread initialized.", LogLevel::DEBUG);
 	while (true)
 	{
 		{
 			std::unique_lock lock(mtx);
+			Logger::log("Cleanse thread sleeping", LogLevel::DEBUG);
 			if (cv.wait_for(lock, std::chrono::seconds(10), [this] { return !running; })) {
+				Logger::log("Cleanse thread ended.", LogLevel::DEBUG);
 				return;
 			}
 		}
+		Logger::log("Cleanse thread running", LogLevel::DEBUG);
 		{
 			std::lock_guard messagesLock(messagesMutex);
 			for (auto it = this->messages.begin(); it != this->messages.end();)
@@ -81,23 +86,8 @@ bool MessageReceiver::verifyMessage(Request *request)
 	return Protocol::verifyChecksum(request->datagram, request->data);
 }
 
-bool returnTrueWithProbability(int n)
-{
-	if (n < 0 || n > 100)
-	{
-		throw std::invalid_argument("Probability must be between 0 and 100.");
-	}
-	int randomValue = std::rand() % 100;
-	return randomValue < n;
-}
-
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	// if (!returnTrueWithProbability(100))
-	// {
-	// 	std::cerr << "MISSED PACKAGE" << std::endl;
-	// 	return;
-	// }
 	if (!verifyMessage(request))
 	{
 		sendDatagramNACK(request, socketfd);
@@ -116,10 +106,6 @@ void MessageReceiver::handleMessage(Request *request, int socketfd)
 
 }
 
-
-// Create message in messages
-// Return ack for the zero datagram
-// TODO destrutor
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd)
 {
 	auto *message = new Message(request->datagram->getDatagramTotal());
