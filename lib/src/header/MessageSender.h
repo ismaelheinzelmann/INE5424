@@ -1,4 +1,6 @@
 #pragma once
+#include <map>
+
 #include "Datagram.h"
 #include <netinet/in.h>
 #include <vector>
@@ -10,6 +12,9 @@
 class MessageSender {
 public:
 	explicit MessageSender(int socketFD);
+	static void buildDatagrams(std::vector<std::vector<unsigned char>>* datagrams,
+	                           std::map<unsigned short, bool>* acknowledgments,
+	                           in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char>& message);
 	~MessageSender() = default;
 	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
 private:

@@ -23,10 +23,36 @@
 #define RETRY_DATA_TIMEOUT_USEC 100
 #define RETRY_DATA_TIMEOUT_USEC_MAX 800
 #define TIMEOUT_INCREMENT 200
+#define BATCH_SIZE 30
 
 MessageSender::MessageSender(int socketFD)
 {
 	this->socketFD = socketFD;
+}
+
+void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
+                                   std::map<unsigned short, bool> *acknowledgments, in_port_t transientPort,
+                                   unsigned short totalDatagrams, std::vector<unsigned char> &message)
+{
+	for (int i = 0; i < totalDatagrams; ++i)
+	{
+		auto versionDatagram = Datagram();
+		versionDatagram.setSourcePort(transientPort);
+		versionDatagram.setVersion(i + 1);
+		versionDatagram.setDatagramTotal(totalDatagrams);
+		for (unsigned short j = 0; j < 1024; j++)
+		{
+			const unsigned int index = i * 1024 + j;
+			if (index >= message.size())
+				break;
+			versionDatagram.getData()->push_back(message.at(index));
+		}
+		versionDatagram.setDataLength(versionDatagram.getData()->size());
+		auto serializedDatagram = Protocol::serialize(&versionDatagram);
+		Protocol::setChecksum(&serializedDatagram);
+		(*datagrams)[i] = serializedDatagram;
+		(*acknowledgments)[i] = false;
+	}
 }
 
 bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message)
@@ -41,30 +67,12 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	{
 		return false;
 	}
-	// Start build of datagrams
-	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams + 1);
-	auto acknowledgments = std::map<unsigned short, bool>();
-	for (int i = 0; i < totalDatagrams; ++i)
-	{
-		auto versionDatagram = Datagram();
-		versionDatagram.setSourcePort(transientSocketFd.second.sin_port);
-		versionDatagram.setVersion(i + 1);
-		versionDatagram.setDatagramTotal(totalDatagrams);
-		for (unsigned short j = 0; j < 1024; j++)
-		{
-			const unsigned int index = i * 1024 + j;
-			if (index >= message.size())
-				break;
-			versionDatagram.getData()->push_back(message.at(index));
-		}
-		versionDatagram.setDataLength(versionDatagram.getData()->size());
-		auto serializedDatagram = Protocol::serialize(&versionDatagram);
-		Protocol::setChecksum(&serializedDatagram);
-		datagrams[i] = serializedDatagram;
-		acknowledgments[i] = false;
-	}
+	// build of datagrams
+	std::vector<std::vector<unsigned char>> datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
+	std::map<unsigned short, bool> acknowledgments;
+	buildDatagrams(&datagrams, &acknowledgments, transientSocketFd.second.sin_port, totalDatagrams, message);
 
-	unsigned short batchSize = 30;
+	unsigned short batchSize = BATCH_SIZE;
 	unsigned short sent = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++)
@@ -103,28 +111,35 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 				if (response.getVersion() - 1 < batchStart * batchSize || response.getVersion() - 1 > (batchStart *
 					batchSize) + batchSize)
 				{
+					Logger::log("Received old response.", LogLevel::DEBUG);
 					continue;
 				}
 				if (response.getVersion() - 1 <= totalDatagrams && response.isACK() && !acknowledgments[response.
 					getVersion() - 1])
 				{
-					std::cout << "Datagram of version " << response.getVersion() << " accepted." << std::endl;
+					Logger::log("Datagram of version " + std::to_string(response.getVersion()) + " accepted.",
+					            LogLevel::DEBUG);
 					acknowledgments[response.getVersion() - 1] = true;
 					batchAck++;
 					sent++;
 				}
 				if (response.isACK() && response.isFIN())
 				{
+					Logger::log("Peer ended connection with success at receiving message.", LogLevel::DEBUG);
 					close(transientSocketFd.first);
 					return true;
 				}
 				if (response.isFIN())
 				{
+					Logger::log("Peer ended connection.", LogLevel::DEBUG);
 					close(transientSocketFd.first);
 					return false;
 				}
 				if (batchAck == batchSize)
+				{
+					Logger::log("Batch " + std::to_string(batchStart + 1) + " aknowledged.", LogLevel::DEBUG);
 					break;
+				}
 			}
 		}
 		if (batchAck != batchSize)

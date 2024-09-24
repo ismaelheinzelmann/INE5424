@@ -48,14 +48,18 @@ MessageReceiver::~MessageReceiver()
 
 void MessageReceiver::cleanse()
 {
+	Logger::log("Cleanse thread initialized.", LogLevel::DEBUG);
 	while (true)
 	{
 		{
 			std::unique_lock lock(mtx);
+			Logger::log("Cleanse thread sleeping", LogLevel::DEBUG);
 			if (cv.wait_for(lock, std::chrono::seconds(10), [this] { return !running; })) {
+				Logger::log("Cleanse thread ended.", LogLevel::DEBUG);
 				return;
 			}
 		}
+		Logger::log("Cleanse thread running", LogLevel::DEBUG);
 		{
 			std::lock_guard messagesLock(messagesMutex);
 			for (auto it = this->messages.begin(); it != this->messages.end();)
@@ -84,11 +88,6 @@ bool MessageReceiver::verifyMessage(Request *request)
 
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	// if (!returnTrueWithProbability(100))
-	// {
-	// 	std::cerr << "MISSED PACKAGE" << std::endl;
-	// 	return;
-	// }
 	if (!verifyMessage(request))
 	{
 		sendDatagramNACK(request, socketfd);
@@ -107,10 +106,6 @@ void MessageReceiver::handleMessage(Request *request, int socketfd)
 
 }
 
-
-// Create message in messages
-// Return ack for the zero datagram
-// TODO destrutor
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd)
 {
 	auto *message = new Message(request->datagram->getDatagramTotal());
@@ -123,10 +118,6 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd)
 
 void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 {
-	if(request->datagram->getVersion() == 0)
-	{
-		Logger::log("SHOULD NOT BE 0 HERE", LogLevel::ERROR);
-	}
 	request->clientRequest->sin_port = request->datagram->getSourcePort();
 	std::shared_lock lock(messagesMutex);
 	Message *message = getMessage(request->clientRequest);
