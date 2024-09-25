@@ -3,10 +3,11 @@ Socket reliable message library for INE5424 course at UFSC.
 
 ### Project Structure
 
-#### The project is organized in three main folders
+#### The project is organized in four main folders
 - client: The example client for the library test
-- lib: The library itself
+- config: The configuration files for the client
 - doc: The project documentation
+- lib: The library itself
 
 #### The internal client and library structure is defined as:
 
