@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <fcntl.h>
 #include <random>
+#include <vector>
 
 #include "../header/Flags.h"
 // Serializes data and computes the checksum while doing so.
@@ -80,11 +81,23 @@ unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDat
 }
 
 unsigned int Protocol::sumChecksum32(const std::vector<unsigned char>* data) {
-	unsigned int sum = 0;
+	unsigned int crc = 0xFFFFFFFF;  // start
+	unsigned int polynomial = 0xEDB88320;  // The polynomial for CRC-32 standard
+
+	// for each byte
 	for (unsigned char byte : *data) {
-		sum += byte;
+		crc ^= byte;  // XOR byte with the current remainder
+		for (int i = 0; i < 8; ++i) {  // for each byte
+			if (crc & 1) {
+				crc = (crc >> 1) ^ polynomial;
+			} else {
+				crc >>= 1;
+			}
+		}
 	}
-	return sum;
+
+	// invert the bits to get the final CRC
+	return crc ^ 0xFFFFFFFF;
 }
 
 bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram)
