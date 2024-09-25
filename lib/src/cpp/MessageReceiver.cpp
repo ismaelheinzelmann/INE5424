@@ -147,7 +147,6 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd)
 			message->delivered = true;
 			messageQueue->push(std::make_pair(true, *message->getData()));
 		}
-		return;
 	}
 	sendDatagramACK(request, socketfd);
 }

@@ -74,6 +74,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 
 	unsigned short batchSize = BATCH_SIZE;
 	unsigned short sent = 0;
+	unsigned short acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++)
 	{
@@ -89,7 +90,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 		for (int attempt = 0; attempt < RETRY_DATA_ATTEMPT; attempt++)
 		{
 			Logger::log("Attempt: " + std::to_string(attempt), LogLevel::DEBUG);
-			if (batchAck == batchSize)
+			if (batchAck == batchSize || acks == totalDatagrams)
 				break;
 
 			for (unsigned short j = 0; j < batchSize; j++)
@@ -122,6 +123,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					acknowledgments[response.getVersion() - 1] = true;
 					batchAck++;
 					sent++;
+					acks++;
 				}
 				if (response.isACK() && response.isFIN())
 				{
@@ -142,13 +144,13 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 				}
 			}
 		}
-		if (batchAck != batchSize)
+		if (batchAck != batchSize || acks == totalDatagrams)
 		{
 			break;
 		}
 	}
 	close(transientSocketFd.first);
-	return false;
+	return acks == totalDatagrams;
 }
 
 std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort()
