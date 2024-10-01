@@ -8,22 +8,23 @@
 #define MESSAGESENDER_H
 
 
-
-class MessageSender {
+class MessageSender{
 public:
 	explicit MessageSender(int socketFD);
 	static void buildDatagrams(std::vector<std::vector<unsigned char>>* datagrams,
 	                           std::map<unsigned short, bool>* acknowledgments,
-	                           in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char>& message);
+	                           std::map<unsigned short, bool>* responses,
+	                           in_port_t transientPort, unsigned short totalDatagrams,
+	                           std::vector<unsigned char>& message);
 	~MessageSender() = default;
-	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
+	bool sendMessage(sockaddr_in& destin, std::vector<unsigned char>& message);
+
 private:
 	int socketFD;
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	unsigned short calculateTotalDatagrams(unsigned int dataLength);
 	bool ackAttempts(int transientSocketfd, sockaddr_in& destin, Datagram* datagram);
 };
-
 
 
 #endif //MESSAGESENDER_H

@@ -31,7 +31,8 @@ MessageSender::MessageSender(int socketFD)
 }
 
 void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
-                                   std::map<unsigned short, bool> *acknowledgments, in_port_t transientPort,
+                                   std::map<unsigned short, bool> *acknowledgments,
+                                   std::map<unsigned short, bool> *responses, in_port_t transientPort,
                                    unsigned short totalDatagrams, std::vector<unsigned char> &message)
 {
 	for (int i = 0; i < totalDatagrams; ++i)
@@ -52,6 +53,7 @@ void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *data
 		Protocol::setChecksum(&serializedDatagram);
 		(*datagrams)[i] = serializedDatagram;
 		(*acknowledgments)[i] = false;
+		(*responses)[i] = false;
 	}
 }
 
@@ -70,7 +72,9 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	// build of datagrams
 	std::vector<std::vector<unsigned char>> datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
 	std::map<unsigned short, bool> acknowledgments;
-	buildDatagrams(&datagrams, &acknowledgments, transientSocketFd.second.sin_port, totalDatagrams, message);
+	std::map<unsigned short, bool> responses;
+	buildDatagrams(&datagrams, &acknowledgments, &responses, transientSocketFd.second.sin_port, totalDatagrams,
+	               message);
 
 	unsigned short batchSize = BATCH_SIZE;
 	unsigned short sent = 0;
@@ -107,24 +111,30 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 
 			}
 			while (Protocol::readDatagramSocketTimeout(&response, transientSocketFd.first, &destin,
-			                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt, &buff))
+			                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt,
+			                                           &buff))
 			{
+				// Resposta de outro batch, pode ser descartada.
 				if (response.getVersion() - 1 < batchStart * batchSize || response.getVersion() - 1 > (batchStart *
 					batchSize) + batchSize)
 				{
 					Logger::log("Received old response.", LogLevel::DEBUG);
 					continue;
 				}
+				// Armazena informação de ACK recebido.
 				if (response.getVersion() - 1 <= totalDatagrams && response.isACK() && !acknowledgments[response.
 					getVersion() - 1])
 				{
 					Logger::log("Datagram of version " + std::to_string(response.getVersion()) + " accepted.",
 					            LogLevel::DEBUG);
 					acknowledgments[response.getVersion() - 1] = true;
+					responses[response.getVersion() - 1] = true;
 					batchAck++;
 					sent++;
 					acks++;
 				}
+
+				// Conexão finalizada, com ou sem sucesso.
 				if (response.isACK() && response.isFIN())
 				{
 					Logger::log("Peer ended connection with success at receiving message.", LogLevel::DEBUG);
@@ -137,13 +147,36 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					close(transientSocketFd.first);
 					return false;
 				}
+
+				// Informa que a versão foi negada.
+				if (response.isNACK())
+				{
+					responses[response.getVersion() - 1] = true;
+				}
+
+				// Batch acordado, procede para o proximo batch
 				if (batchAck == batchSize)
 				{
 					Logger::log("Batch " + std::to_string(batchStart + 1) + " aknowledged.", LogLevel::DEBUG);
 					break;
 				}
+
+				// Verifica se o batch foi ao menos respondido, caso tenha sido, mesmo que com algum NACK, procede para
+				// retransmissão (se for o caso).
+				auto responsesCounter = 0;
+				for (auto &&p : responses)
+					if (p.second)
+						++responsesCounter;
+				if (responsesCounter == batchSize)
+				{
+					Logger::log("Batch " + std::to_string(batchStart + 1) + " responded, but not aknowledged.",
+					            LogLevel::DEBUG);
+					break;
+				}
 			}
 		}
+		// No final de uma tentativa, verifica se todo o batch foi acordado. Caso não, encerra o fluxo de envio.
+		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
 		if (batchAck != batchSize || acks == totalDatagrams)
 		{
 			break;

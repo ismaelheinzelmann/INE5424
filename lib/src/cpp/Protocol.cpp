@@ -139,8 +139,6 @@ bool Protocol::readDatagramSocketTimeout(Datagram *datagramBuff,
 		if (bytes_received > 0)
 		{
 			bufferToDatagram(*datagramBuff, *buff);
-			flags = fcntl(socketfd, F_GETFL, 0);
-			flags &= ~O_NONBLOCK;
 			fcntl(socketfd, F_SETFL, flags);
 			return true;
 		}
@@ -151,11 +149,10 @@ bool Protocol::readDatagramSocketTimeout(Datagram *datagramBuff,
 		if (elapsed_ms > timeoutMS)
 		{
 			Logger::log("Timed out with time " + std::to_string(elapsed_ms), LogLevel::WARNING);
-			flags = fcntl(socketfd, F_GETFL, 0);
-			flags &= ~O_NONBLOCK;
 			fcntl(socketfd, F_SETFL, flags);
 			return false;
 		}
+		// Sleep de 10ms, um spin lock basicamente
 		usleep(10000);
 	}
 }
