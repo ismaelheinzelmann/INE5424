@@ -1,4 +1,5 @@
 #pragma once
+#include <csignal>
 #include <Flags.h>
 #include <vector>
 #include <netinet/in.h>
@@ -8,18 +9,17 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-class Protocol
-{
+class Protocol{
 public:
 	static std::vector<unsigned char> serialize(Datagram* datagram);
 	static void setChecksum(std::vector<unsigned char>* data);
 	static Datagram deserialize(std::vector<unsigned char>& serializedDatagram);
 	static unsigned int computeChecksum(std::vector<unsigned char>* serializedDatagram);
 	static bool verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram);
-	static bool readDatagramSocketTimeout(Datagram& datagramBuff,
+	static bool readDatagramSocketTimeout(Datagram* datagramBuff,
 	                                      int socketfd,
-	                                      sockaddr_in& senderAddr,
-	                                      int timeoutMS);
+	                                      sockaddr_in* senderAddr,
+	                                      int timeoutMS, std::vector<unsigned char>* buff);
 	static bool readDatagramSocket(Datagram* datagramBuff, int socketfd, sockaddr_in* senderAddr, std::vector<unsigned char>* buff);
 	static bool sendACK(Datagram* datagram, sockaddr_in* to, int socketfd);
 	static bool sendNACK(Datagram* datagram, sockaddr_in* to, int socketfd);
@@ -28,8 +28,9 @@ public:
 	static void setFlags(Datagram* datagram, Flags* flags);
 	static unsigned int sumChecksum32(const std::vector<unsigned char>* data);
 
-
 private:
+	static volatile sig_atomic_t timeOut;
+	static void handleTimeout(int sig);
 	static void bufferToDatagram(Datagram& datagramBuff, const std::vector<unsigned char>& bytesBuffer);
 };
 

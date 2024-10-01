@@ -76,6 +76,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	unsigned short sent = 0;
 	unsigned short acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
+	std::vector<unsigned char> buff = std::vector<unsigned char>(1040);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++)
 	{
 		Datagram response;
@@ -89,7 +90,6 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 		}
 		for (int attempt = 0; attempt < RETRY_DATA_ATTEMPT; attempt++)
 		{
-			Logger::log("Attempt: " + std::to_string(attempt), LogLevel::DEBUG);
 			if (batchAck == batchSize || acks == totalDatagrams)
 				break;
 
@@ -106,8 +106,8 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 				       reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 
 			}
-			while (Protocol::readDatagramSocketTimeout(response, transientSocketFd.first, destin,
-			                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt))
+			while (Protocol::readDatagramSocketTimeout(&response, transientSocketFd.first, &destin,
+			                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt, &buff))
 			{
 				if (response.getVersion() - 1 < batchStart * batchSize || response.getVersion() - 1 > (batchStart *
 					batchSize) + batchSize)
@@ -199,6 +199,7 @@ bool MessageSender::ackAttempts(int transientSocketfd, sockaddr_in &destin, Data
 	flags.SYN = true;
 	Datagram response;
 	Protocol::setFlags(datagram, &flags);
+	auto buff = std::vector<unsigned char>(1040);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i)
 	{
@@ -210,8 +211,8 @@ bool MessageSender::ackAttempts(int transientSocketfd, sockaddr_in &destin, Data
 		}
 		sockaddr_in senderAddr{};
 		senderAddr.sin_family = AF_INET;
-		sent = Protocol::readDatagramSocketTimeout(response, transientSocketfd, senderAddr,
-		                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
+		sent = Protocol::readDatagramSocketTimeout(&response, transientSocketfd, &senderAddr,
+		                                           RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i, &buff);
 		if (!sent)
 			continue;
 		if (response.isACK() && response.isSYN() && datagram->getVersion() == response.getVersion())

@@ -1,16 +1,16 @@
 #include "../header/Protocol.h"
+
+#include <Logger.h>
+#include <csignal>
+
 #include "TypeUtils.h"
-#include <iostream>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#include <unistd.h>
-#include <cstring>
-#include <sys/select.h>
-#include <cstdio>
-#include <fcntl.h>
 #include <random>
 #include <vector>
+#include <future>
+#include <fcntl.h>
 
 #include "../header/Flags.h"
 // Serializes data and computes the checksum while doing so.
@@ -47,6 +47,8 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram)
 	return serializedDatagram;
 }
 
+volatile sig_atomic_t Protocol::timeOut = false;
+
 void Protocol::setChecksum(std::vector<unsigned char> *data)
 {
 	auto checksum = sumChecksum32(data);
@@ -80,17 +82,24 @@ unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDat
 	return sumChecksum32(serializedDatagram);
 }
 
-unsigned int Protocol::sumChecksum32(const std::vector<unsigned char>* data) {
-	unsigned int crc = 0xFFFFFFFF;  // start
-	unsigned int polynomial = 0xEDB88320;  // The polynomial for CRC-32 standard
+unsigned int Protocol::sumChecksum32(const std::vector<unsigned char> *data)
+{
+	unsigned int crc = 0xFFFFFFFF; // start
+	unsigned int polynomial = 0xEDB88320; // The polynomial for CRC-32 standard
 
 	// for each byte
-	for (unsigned char byte : *data) {
-		crc ^= byte;  // XOR byte with the current remainder
-		for (int i = 0; i < 8; ++i) {  // for each byte
-			if (crc & 1) {
+	for (unsigned char byte : *data)
+	{
+		crc ^= byte; // XOR byte with the current remainder
+		for (int i = 0; i < 8; ++i)
+		{
+			// for each byte
+			if (crc & 1)
+			{
 				crc = (crc >> 1) ^ polynomial;
-			} else {
+			}
+			else
+			{
 				crc >>= 1;
 			}
 		}
@@ -107,57 +116,52 @@ bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *se
 	return dch == cch;
 }
 
-bool Protocol::readDatagramSocketTimeout(Datagram &datagramBuff, int socketfd, sockaddr_in &senderAddr, int timeoutMS)
+void Protocol::handleTimeout(int sig)
 {
-	fd_set read_fds;
-	timeval timeout{};
-	timeout.tv_sec = timeoutMS / 1000;
-	timeout.tv_usec = (timeoutMS % 1000) * 1000;
-
-	// Initialize the file descriptor set
-	FD_ZERO(&read_fds);
-	FD_SET(socketfd, &read_fds);
-
-	// Wait for data to be available on the socket
-	int select_result = select(socketfd + 1, &read_fds, nullptr, nullptr, &timeout);
-
-	if (select_result < 0)
-	{
-		return false;
-	}
-	if (select_result == 0)
-	{
-		return false;
-	}
-
-	if (FD_ISSET(socketfd, &read_fds))
-	{
-		socklen_t senderAddrLen = sizeof(senderAddr);
-		auto bytesBuffer = std::vector<unsigned char>(1040);
-		ssize_t bytes_received = recvfrom(socketfd, bytesBuffer.data(), bytesBuffer.size(), 0,
-		                                  reinterpret_cast<struct sockaddr *>(&senderAddr), &senderAddrLen);
-		if (bytes_received < 0)
-		{
-			return false;
-		}
-
-		bufferToDatagram(datagramBuff, bytesBuffer);
-		if (bytes_received > 16)
-		{
-			const std::vector dataVec(
-				bytesBuffer.begin() + 16,
-				bytesBuffer.begin() + 16 + datagramBuff.getDataLength()
-				);
-			datagramBuff.setData(dataVec);
-		}
-		return true;
-	}
-
-	// Socket was not ready for reading
-	return false;
+	Logger::log(std::to_string(sig), LogLevel::NONE);
+	timeOut = 0;
 }
 
-bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr, std::vector<unsigned char>* buff)
+
+bool Protocol::readDatagramSocketTimeout(Datagram *datagramBuff,
+                                         int socketfd,
+                                         sockaddr_in *senderAddr,
+                                         int timeoutMS, std::vector<unsigned char> *buff)
+{
+	int flags = fcntl(socketfd, F_GETFL, 0);
+	fcntl(socketfd, F_SETFL, flags | O_NONBLOCK);
+	auto start_time = std::chrono::steady_clock::now();
+	socklen_t senderAddrLen = sizeof(*senderAddr);
+	while (true)
+	{
+		ssize_t bytes_received = recvfrom(socketfd, buff->data(), buff->size(), 0,
+		                                  reinterpret_cast<sockaddr *>(senderAddr), &senderAddrLen);
+		if (bytes_received > 0)
+		{
+			bufferToDatagram(*datagramBuff, *buff);
+			flags = fcntl(socketfd, F_GETFL, 0);
+			flags &= ~O_NONBLOCK;
+			fcntl(socketfd, F_SETFL, flags);
+			return true;
+		}
+
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+
+		if (elapsed_ms > timeoutMS)
+		{
+			Logger::log("Timed out with time " + std::to_string(elapsed_ms), LogLevel::WARNING);
+			flags = fcntl(socketfd, F_GETFL, 0);
+			flags &= ~O_NONBLOCK;
+			fcntl(socketfd, F_SETFL, flags);
+			return false;
+		}
+		usleep(10000);
+	}
+}
+
+bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr,
+                                  std::vector<unsigned char> *buff)
 {
 	socklen_t senderAddrLen = sizeof(senderAddr);
 	ssize_t bytes_received = recvfrom(socketfd, buff->data(), buff->size(), 0,
@@ -181,19 +185,6 @@ void Protocol::bufferToDatagram(Datagram &datagramBuff, const std::vector<unsign
 	datagramBuff.setChecksum(TypeUtils::buffToUnsignedInt(bytesBuffer, 12));
 }
 
-bool randomReturnPercent() {
-	// Create a random number generator
-	static std::random_device rd;  // Obtain a random number from hardware
-	static std::mt19937 eng(rd());  // Seed the generator
-	static std::uniform_int_distribution<> distr(1, 100); // Define the range
-
-	// Generate a random number between 1 and 100
-	int randomValue = distr(eng);
-
-	// Return true if the random number is less than or equal to 70
-	return randomValue <= 70;
-}
-
 bool Protocol::sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, Flags *flags)
 {
 	// if (randomReturnPercent()) return true;
@@ -207,10 +198,15 @@ bool Protocol::sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, F
 
 void Protocol::setFlags(Datagram *datagram, Flags *flags)
 {
-	if (flags->ACK) datagram->setIsACK();
-	if (flags->NACK) datagram->setIsNACK();
-	if (flags->SYN) datagram->setIsSYN();
-	if (flags->FIN) datagram->setIsFIN();
-	if (flags->END) datagram->setIsEND();
+	if (flags->ACK)
+		datagram->setIsACK();
+	if (flags->NACK)
+		datagram->setIsNACK();
+	if (flags->SYN)
+		datagram->setIsSYN();
+	if (flags->FIN)
+		datagram->setIsFIN();
+	if (flags->END)
+		datagram->setIsEND();
 }
 
