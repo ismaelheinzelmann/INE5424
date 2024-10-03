@@ -17,7 +17,8 @@ public:
 	                           in_port_t transientPort, unsigned short totalDatagrams,
 	                           std::vector<unsigned char>& message);
 	~MessageSender() = default;
-	bool sendMessage(sockaddr_in& destin, std::vector<unsigned char>& message);
+	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
+	bool sendBroadcast(std::vector<unsigned char> &message);
 
 private:
 	int socketFD;

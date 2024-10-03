@@ -186,6 +186,48 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	return acks == totalDatagrams;
 }
 
+bool MessageSender::sendBroadcast(std::vector<unsigned char> &message)
+{
+	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
+
+	constexpr int broadcastPermission = 1;
+	if (setsockopt(transientSocketFd.first, SOL_SOCKET, SO_BROADCAST, &broadcastPermission, sizeof(broadcastPermission)) < 0) {
+		Logger::log("Failed to set broadcast permission.", LogLevel::ERROR);
+		close(transientSocketFd.first);
+		return true;
+	}
+
+	auto datagram = Datagram();
+	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
+	datagram.setDatagramTotal(totalDatagrams);
+	datagram.setSourcePort(transientSocketFd.second.sin_port);
+	// build of datagrams
+	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
+	std::map<unsigned short, bool> acknowledgments, responses;
+	buildDatagrams(&datagrams, &acknowledgments, &responses, transientSocketFd.second.sin_port, totalDatagrams,
+				   message);
+
+	auto buff = std::vector<unsigned char>(1040);
+	sockaddr_in destin{};
+	memset(&destin, 0, sizeof(destin));
+	destin.sin_family = AF_INET;
+	destin.sin_port = htons(8080);
+	destin.sin_addr.s_addr = INADDR_BROADCAST;
+
+	datagram.setData(message);
+
+	if (sendto(transientSocketFd.first, datagram.getData(), message.size(), 0, reinterpret_cast<sockaddr *>(&destin), sizeof(destin)) < 0) {
+		perror("Send failed");
+		close(transientSocketFd.first);
+		return true;
+	}
+
+	std::cout << "Broadcast message sent" << std::endl;
+
+	close(transientSocketFd.first);
+	return true;
+}
+
 std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort()
 {
 	sockaddr_in addr{};

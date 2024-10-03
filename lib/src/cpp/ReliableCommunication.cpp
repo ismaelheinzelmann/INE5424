@@ -88,6 +88,11 @@ bool ReliableCommunication::send(const unsigned short id,
 	return sender->sendMessage(destin, data);
 }
 
+bool ReliableCommunication::sendBroadcast(std::vector<unsigned char> &data)
+{
+	return sender->sendBroadcast(data);
+}
+
 void ReliableCommunication::listen()
 {
 	Logger::log("Listen thread started.", LogLevel::DEBUG);

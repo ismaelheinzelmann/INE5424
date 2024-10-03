@@ -20,7 +20,8 @@ public:
 	ReliableCommunication(std::string configFilePath, unsigned short nodeID);
 	~ReliableCommunication();
 	void printNodes(std::mutex* printLock) const;
-	bool send(unsigned short id, std::vector<unsigned char>& data);
+	bool send(unsigned short id, std::vector<unsigned char> &data);
+	bool sendBroadcast(std::vector<unsigned char> &data);
 	void stop();
 	void listen();
 	// If false, RC stoppend listen
