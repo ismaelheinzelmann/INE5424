@@ -19,6 +19,7 @@ public:
 	~MessageSender() = default;
 	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
 	bool sendBroadcast(std::vector<unsigned char> &message);
+	static sockaddr_in broadcastAddress();
 
 private:
 	int socketFD;

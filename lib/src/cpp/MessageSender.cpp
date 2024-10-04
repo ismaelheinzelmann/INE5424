@@ -71,22 +71,18 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	}
 	// build of datagrams
 	std::vector<std::vector<unsigned char>> datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
-	std::map<unsigned short, bool> acknowledgments;
-	std::map<unsigned short, bool> responses;
+	std::map<unsigned short, bool> acknowledgments, responses;
 	buildDatagrams(&datagrams, &acknowledgments, &responses, transientSocketFd.second.sin_port, totalDatagrams,
 	               message);
 
-	unsigned short batchSize = BATCH_SIZE;
-	unsigned short sent = 0;
-	unsigned short acks = 0;
+	unsigned short batchSize = BATCH_SIZE, sent = 0, acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
 	std::vector<unsigned char> buff = std::vector<unsigned char>(1040);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++)
 	{
 		Datagram response;
 
-		unsigned short batchIndex;
-		unsigned short batchAck = 0;
+		unsigned short batchIndex, batchAck = 0;
 		if (sent == totalDatagrams)
 		{
 			close(transientSocketFd.first);
@@ -208,24 +204,30 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message)
 				   message);
 
 	auto buff = std::vector<unsigned char>(1040);
-	sockaddr_in destin{};
-	memset(&destin, 0, sizeof(destin));
-	destin.sin_family = AF_INET;
-	destin.sin_port = htons(8080);
-	destin.sin_addr.s_addr = INADDR_BROADCAST;
 
-	datagram.setData(message);
+	sockaddr_in destin = broadcastAddress();
 
-	if (sendto(transientSocketFd.first, datagram.getData(), message.size(), 0, reinterpret_cast<sockaddr *>(&destin), sizeof(destin)) < 0) {
+	if (sendto(transientSocketFd.first, datagrams[0].data(), datagrams[0].size(), 0, reinterpret_cast<sockaddr *>(&destin), sizeof(destin)) < 0) {
 		perror("Send failed");
 		close(transientSocketFd.first);
 		return true;
 	}
 
-	std::cout << "Broadcast message sent" << std::endl;
+	if (Protocol::readDatagramSocketTimeout(&datagram, transientSocketFd.first, &destin,
+													   0,
+													   &buff))
 
 	close(transientSocketFd.first);
 	return true;
+}
+
+sockaddr_in MessageSender::broadcastAddress()
+{
+	sockaddr_in broadcastAddr{};
+	broadcastAddr.sin_family = AF_INET;
+	broadcastAddr.sin_port = htons(8080); // Should be sent to all ports
+	broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
+	return broadcastAddr;
 }
 
 std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort()
