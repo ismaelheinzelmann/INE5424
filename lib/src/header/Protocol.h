@@ -1,6 +1,7 @@
 #pragma once
 #include <csignal>
 #include <Flags.h>
+#include <thread>
 #include <vector>
 #include <netinet/in.h>
 #include <sys/types.h>
@@ -16,6 +17,7 @@ public:
 	static Datagram deserialize(std::vector<unsigned char>& serializedDatagram);
 	static unsigned int computeChecksum(std::vector<unsigned char>* serializedDatagram);
 	static bool verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram);
+	static void signalHandler(int);
 	static bool readDatagramSocketTimeout(Datagram* datagramBuff,
 	                                      int socketfd,
 	                                      sockaddr_in* senderAddr,
@@ -29,8 +31,8 @@ public:
 	static unsigned int sumChecksum32(const std::vector<unsigned char>* data);
 
 private:
-	static volatile sig_atomic_t timeOut;
-	static void handleTimeout(int sig);
+	static thread_local std::atomic<std::thread::id> timeoutThreadId;
+	static thread_local std::atomic<bool> waitingTimeout;
 	static void bufferToDatagram(Datagram& datagramBuff, const std::vector<unsigned char>& bytesBuffer);
 };
 

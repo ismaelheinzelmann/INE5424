@@ -5,9 +5,8 @@
 
 #include "TypeUtils.h"
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <netinet/in.h>
-#include <random>
+#include <thread>
 #include <vector>
 #include <future>
 #include <fcntl.h>
@@ -46,8 +45,6 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram)
 		serializedDatagram.push_back((*datagram->getData())[i]);
 	return serializedDatagram;
 }
-
-volatile sig_atomic_t Protocol::timeOut = false;
 
 void Protocol::setChecksum(std::vector<unsigned char> *data)
 {
@@ -115,45 +112,43 @@ bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *se
 	auto cch = computeChecksum(serializedDatagram);
 	return dch == cch;
 }
+thread_local std::atomic<std::thread::id> Protocol::timeoutThreadId = std::this_thread::get_id();
+thread_local std::atomic<bool> Protocol::waitingTimeout = false;
 
-void Protocol::handleTimeout(int sig)
-{
-	Logger::log(std::to_string(sig), LogLevel::NONE);
-	timeOut = 0;
+void Protocol::signalHandler(int) {
+	std::thread::id currentThreadId = std::this_thread::get_id();
+	if (currentThreadId == timeoutThreadId && waitingTimeout) {
+		waitingTimeout.store(false);
+		throw std::runtime_error("timeout detected");
+	}
 }
 
-
 bool Protocol::readDatagramSocketTimeout(Datagram *datagramBuff,
-                                         int socketfd,
-                                         sockaddr_in *senderAddr,
-                                         int timeoutMS, std::vector<unsigned char> *buff)
+										 int socketfd,
+										 sockaddr_in *senderAddr,
+										 int timeoutMS, std::vector<unsigned char> *buff)
 {
-	int flags = fcntl(socketfd, F_GETFL, 0);
-	fcntl(socketfd, F_SETFL, flags | O_NONBLOCK);
-	auto start_time = std::chrono::steady_clock::now();
-	socklen_t senderAddrLen = sizeof(*senderAddr);
-	while (true)
+	std::signal(SIGALRM, signalHandler);
+
+	sigset_t newmask, oldmask;
+	sigemptyset(&newmask);
+	sigaddset(&newmask, SIGALRM);
+	pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
+	ualarm(timeoutMS * 1000, 0);
+	waitingTimeout.store(true);
+	try
 	{
-		ssize_t bytes_received = recvfrom(socketfd, buff->data(), buff->size(), 0,
-		                                  reinterpret_cast<sockaddr *>(senderAddr), &senderAddrLen);
-		if (bytes_received > 0)
-		{
-			bufferToDatagram(*datagramBuff, *buff);
-			fcntl(socketfd, F_SETFL, flags);
-			return true;
-		}
-
-		auto now = std::chrono::steady_clock::now();
-		auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
-
-		if (elapsed_ms > timeoutMS)
-		{
-			Logger::log("Timed out with time " + std::to_string(elapsed_ms), LogLevel::WARNING);
-			fcntl(socketfd, F_SETFL, flags);
-			return false;
-		}
-		// Sleep de 10ms, um spin lock basicamente
-		usleep(10000);
+		pthread_sigmask(SIG_UNBLOCK, &newmask, nullptr);
+		readDatagramSocket(datagramBuff, socketfd, senderAddr, buff);
+		ualarm(0, 0);
+		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
+		return true;
+	}
+	catch (const std::runtime_error &)
+	{
+		ualarm(0, 0);
+		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
+		return false;
 	}
 }
 
