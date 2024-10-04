@@ -25,7 +25,7 @@ private:
 	int socketFD;
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	unsigned short calculateTotalDatagrams(unsigned int dataLength);
-	bool ackAttempts(int transientSocketfd, sockaddr_in& destin, Datagram* datagram);
+	bool ackAttempts(int transientSocketfd, sockaddr_in& destin, Datagram* datagram, bool isBroadcast = false);
 };
 
 

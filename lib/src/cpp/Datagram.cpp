@@ -127,6 +127,11 @@ bool Datagram::isEND()
 	return this->isBitSet(this->getFlags(), 10);
 }
 
+bool Datagram::isBROADCAST()
+{
+	return this->isBitSet(this->getFlags(), 11);
+}
+
 
 void Datagram::setIsACK()
 {
@@ -151,6 +156,11 @@ void Datagram::setIsFIN()
 void Datagram::setIsEND()
 {
 	this->setFlags(this->setBit(this->getFlags(), 10));
+}
+
+void Datagram::setIsBROADCAST()
+{
+	this->setFlags(this->setBit(this->getFlags(), 11));
 }
 
 

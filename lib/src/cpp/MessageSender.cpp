@@ -197,6 +197,15 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message)
 	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
 	datagram.setDatagramTotal(totalDatagrams);
 	datagram.setSourcePort(transientSocketFd.second.sin_port);
+
+	sockaddr_in destin = broadcastAddress();
+
+	bool accepted = ackAttempts(transientSocketFd.first, destin, &datagram, true);
+	if (!accepted)
+	{
+		return false;
+	}
+
 	// build of datagrams
 	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
 	std::map<unsigned short, bool> acknowledgments, responses;
@@ -205,7 +214,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message)
 
 	auto buff = std::vector<unsigned char>(1040);
 
-	sockaddr_in destin = broadcastAddress();
 
 	if (sendto(transientSocketFd.first, datagrams[0].data(), datagrams[0].size(), 0, reinterpret_cast<sockaddr *>(&destin), sizeof(destin)) < 0) {
 		perror("Send failed");
@@ -270,10 +278,12 @@ unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength)
 	return static_cast<int>(ceil(result));
 }
 
-bool MessageSender::ackAttempts(int transientSocketfd, sockaddr_in &destin, Datagram *datagram)
+bool MessageSender::ackAttempts(int transientSocketfd, sockaddr_in &destin, Datagram *datagram, bool isBroadcast)
 {
 	Flags flags;
 	flags.SYN = true;
+	if (isBroadcast)
+		flags.BROADCAST = true;
 	Datagram response;
 	Protocol::setFlags(datagram, &flags);
 	auto buff = std::vector<unsigned char>(1040);

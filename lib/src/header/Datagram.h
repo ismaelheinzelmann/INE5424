@@ -41,11 +41,13 @@ public:
 	bool isNACK(); // Third bit
 	bool isFIN();
 	bool isEND();
+	bool isBROADCAST();
 	void setIsACK();
 	void setIsSYN();
 	void setIsNACK();
 	void setIsFIN();
 	void setIsEND();
+	void setIsBROADCAST();
 
 
 	bool isBitSet(unsigned short value, int bitPosition);

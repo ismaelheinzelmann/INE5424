@@ -200,5 +200,7 @@ void Protocol::setFlags(Datagram *datagram, Flags *flags)
 		datagram->setIsFIN();
 	if (flags->END)
 		datagram->setIsEND();
+	if (flags->BROADCAST)
+		datagram->setIsBROADCAST();
 }
 
