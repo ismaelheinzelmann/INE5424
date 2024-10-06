@@ -187,7 +187,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message)
 	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 
 	constexpr int broadcastPermission = 1;
-	if (setsockopt(transientSocketFd.first, SOL_SOCKET, SO_BROADCAST, &broadcastPermission, sizeof(broadcastPermission)) < 0) {
+	if (setsockopt(socketFD, SOL_SOCKET, SO_BROADCAST, &broadcastPermission, sizeof(broadcastPermission)) < 0) {
 		Logger::log("Failed to set broadcast permission.", LogLevel::ERROR);
 		close(transientSocketFd.first);
 		return true;
@@ -214,13 +214,15 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message)
 
 	auto buff = std::vector<unsigned char>(1040);
 
-
-	if (sendto(transientSocketFd.first, datagrams[0].data(), datagrams[0].size(), 0, reinterpret_cast<sockaddr *>(&destin), sizeof(destin)) < 0) {
+	// Only testing, must work
+	if (sendto(transientSocketFd.first, datagrams[0].data(), datagrams[0].size(),
+		0, reinterpret_cast<sockaddr *>(&destin), sizeof(destin)) < 0) {
 		perror("Send failed");
 		close(transientSocketFd.first);
 		return true;
 	}
 
+	// Same as sending, reads but does not print
 	if (Protocol::readDatagramSocketTimeout(&datagram, transientSocketFd.first, &destin,
 													   0,
 													   &buff))
