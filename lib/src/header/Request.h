@@ -1,6 +1,6 @@
 #pragma once
-#include <vector>
 #include <netinet/in.h>
+#include <vector>
 #include "Datagram.h"
 
 #ifndef REQUEST_H
@@ -12,4 +12,4 @@ struct Request {
 	Datagram *datagram;
 };
 
-#endif //REQUEST_H
+#endif // REQUEST_H
