@@ -109,7 +109,7 @@ void Protocol::signalHandler(int) {
 	std::thread::id currentThreadId = std::this_thread::get_id();
 	if (currentThreadId == timeoutThreadId.load() && waitingTimeout.load()) {
 		waitingTimeout.store(false);
-		throw std::runtime_error("timeout detected");
+		throw std::exception();
 	}
 }
 
@@ -130,7 +130,7 @@ bool Protocol::readDatagramSocketTimeout(Datagram *datagramBuff, int socketfd, s
 		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
 		return true;
 	}
-	catch (const std::runtime_error &) {
+	catch (const std::exception &) {
 		ualarm(0, 0);
 		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
 		return false;

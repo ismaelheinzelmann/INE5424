@@ -154,13 +154,13 @@ void ReliableCommunication::processBroadcastDatagram() {
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1040);
 		Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer);
+		Logger::log("Broadcast Received.", LogLevel::DEBUG);
 		buffer.resize(16 + datagram.getDataLength());
 		// if (!verifyOriginBroadcast(&senderAddr, ))
 		// {
 		// 	Logger::log("Message of invalid process received.", LogLevel::DEBUG);
 		// 	continue;
 		// }
-		Logger::log("Datagram received.", LogLevel::DEBUG);
 		if (datagram.isEND() && senderAddr.sin_family == this->configMap[id].sin_family &&
 			senderAddr.sin_port == this->configMap[id].sin_port &&
 			senderAddr.sin_addr.s_addr == this->configMap[id].sin_addr.s_addr) {
