@@ -10,11 +10,11 @@
 // - Version: The current datagram of the message.
 // - Datagram total: How many datagrams compose the message.
 // - Data length: Length of the current datagram.
-// - Acknowledgement: If acknowledge, the first byte of data is the aknowledge number (which datagram is confirming), the rest can be discarded.
+// - Acknowledgement: If acknowledge, the first byte of data is the aknowledge number (which datagram is confirming),
+// the rest can be discarded.
 // - Checksum: Apply constant mask for the field at the checksum generation, using CRC32.
 // - Data: The data of the datagram.
-class Datagram
-{
+class Datagram {
 public:
 	Datagram();
 	void setSourcePort(unsigned short port);
@@ -33,7 +33,7 @@ public:
 	unsigned short getDataLength();
 	unsigned short getFlags();
 	unsigned int getChecksum();
-	std::vector<unsigned char>* getData();
+	std::vector<unsigned char> *getData();
 
 	// Flag based
 	bool isACK(); // First bit
@@ -64,4 +64,4 @@ private:
 	std::vector<unsigned char> data;
 };
 
-#endif //DATAGRAM_H
+#endif // DATAGRAM_H

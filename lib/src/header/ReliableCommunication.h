@@ -29,6 +29,7 @@ public:
 
 private:
 	int socketInfo;
+	int broadcastInfo;
 	unsigned short id;
 	bool process = true;
 	MessageReceiver* handler;
@@ -38,9 +39,12 @@ private:
 	BlockingQueue<Request*> requestQueue;
 
 	std::thread processingThread;
+	std::thread processingBroadcastThread;
 
 	bool verifyOrigin(sockaddr_in* senderAddr);
+	bool verifyOriginBroadcast(sockaddr_in* senderAddr, int requestSourcePort);
 	void processDatagram();
+	void processBroadcastDatagram();
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);
 };

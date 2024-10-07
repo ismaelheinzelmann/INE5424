@@ -36,7 +36,7 @@ private:
     std::atomic<bool> running{true};
 
     void handleFirstMessage(Request* request, int socketfd);
-    void handleDataMessage(Request* request, int socketfd);
+    void handleDataMessage(Request * request, int socketfd);
     static bool verifyMessage(Request* request);
     static std::pair<in_addr_t, in_port_t> getIdentifier(sockaddr_in* from);
     static bool sendDatagramSYNACK(Datagram* datagram, sockaddr_in* from, int socketfd);

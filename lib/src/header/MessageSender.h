@@ -10,7 +10,7 @@
 
 class MessageSender{
 public:
-	explicit MessageSender(int socketFD);
+	explicit MessageSender(int socketFD, int broadcastFD);
 	static void buildDatagrams(std::vector<std::vector<unsigned char>>* datagrams,
 	                           std::map<unsigned short, bool>* acknowledgments,
 	                           std::map<unsigned short, bool>* responses,
@@ -23,6 +23,7 @@ public:
 
 private:
 	int socketFD;
+	int broadcastFD;
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	unsigned short calculateTotalDatagrams(unsigned int dataLength);
 	bool ackAttempts(int transientSocketfd, sockaddr_in& destin, Datagram* datagram, bool isBroadcast = false);
