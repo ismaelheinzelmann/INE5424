@@ -70,7 +70,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	// End Broadcast
 
 	handler = new MessageReceiver(&messageQueue, &requestQueue);
-	sender = new MessageSender(socketInfo, broadcastInfo);
+	sender = new MessageSender(socketInfo, broadcastInfo, addr);
 }
 
 ReliableCommunication::~ReliableCommunication() {
@@ -156,11 +156,11 @@ void ReliableCommunication::processBroadcastDatagram() {
 		Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer);
 		Logger::log("Broadcast Received.", LogLevel::DEBUG);
 		buffer.resize(16 + datagram.getDataLength());
-		// if (!verifyOriginBroadcast(&senderAddr, ))
-		// {
-		// 	Logger::log("Message of invalid process received.", LogLevel::DEBUG);
-		// 	continue;
-		// }
+		if (!verifyOriginBroadcast(datagram.getSourcePort()))
+		{
+			Logger::log("Message of invalid process received.", LogLevel::DEBUG);
+			continue;
+		}
 		if (datagram.isEND() && senderAddr.sin_family == this->configMap[id].sin_family &&
 			senderAddr.sin_port == this->configMap[id].sin_port &&
 			senderAddr.sin_addr.s_addr == this->configMap[id].sin_addr.s_addr) {
@@ -192,9 +192,9 @@ bool ReliableCommunication::verifyOrigin(sockaddr_in *senderAddr) {
 	return false;
 }
 
-bool ReliableCommunication::verifyOriginBroadcast(sockaddr_in *senderAddr, int requestSourcePort) {
+bool ReliableCommunication::verifyOriginBroadcast( int requestSourcePort) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
-		if (senderAddr->sin_addr.s_addr == nodeAddr.sin_addr.s_addr && requestSourcePort == nodeAddr.sin_port) {
+		if (requestSourcePort == nodeAddr.sin_port) {
 			return true;
 		}
 	}

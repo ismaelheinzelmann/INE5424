@@ -42,7 +42,7 @@ private:
 	std::thread processingBroadcastThread;
 
 	bool verifyOrigin(sockaddr_in* senderAddr);
-	bool verifyOriginBroadcast(sockaddr_in* senderAddr, int requestSourcePort);
+	bool verifyOriginBroadcast(int requestSourcePort);
 	void processDatagram();
 	void processBroadcastDatagram();
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();

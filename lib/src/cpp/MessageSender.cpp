@@ -25,9 +25,10 @@
 #define TIMEOUT_INCREMENT 200
 #define BATCH_SIZE 30
 
-MessageSender::MessageSender(int socketFD, int broadcastFD) {
+MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr) {
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
+	configAddr = configIdAddr;
 }
 
 void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
@@ -174,7 +175,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
 	datagram.setDatagramTotal(totalDatagrams);
-	// datagram.setSourcePort(transientSocketFd.second.sin_port);
+	datagram.setSourcePort(configAddr.sin_port);
 
 	sockaddr_in destin = broadcastAddress();
 
@@ -190,7 +191,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 	auto buff = std::vector<unsigned char>(1040);
 
-	// Only testing, must work
 	if (sendto(broadcastFD, datagrams[0].data(), datagrams[0].size(), 0, reinterpret_cast<sockaddr *>(&destin),
 			   sizeof(destin)) < 0) {
 		close(broadcastFD);
@@ -198,7 +198,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	}
 
 	bool responded = Protocol::readDatagramSocketTimeout(&datagram, broadcastFD, &destin, 0, &buff);
-	// Same as sending, reads but does not print
 	return responded;
 }
 
