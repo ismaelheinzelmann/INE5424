@@ -1,16 +1,14 @@
 #pragma once
+#include "Datagram.h"
 #include <bits/std_mutex.h>
 #include <map>
 #include <netinet/in.h>
 #include <string>
 #include <thread>
 #include <vector>
-#include "BlockingQueue.h"
-#include "Datagram.h"
-#include "MessageReceiver.h"
 #include "MessageSender.h"
-
-#include "DatagramController.h"
+#include "MessageReceiver.h"
+#include "BlockingQueue.h"
 
 #ifndef RELIABLE_H
 #define RELIABLE_H
@@ -23,6 +21,7 @@ public:
 	void printNodes(std::mutex* printLock) const;
 	bool send(unsigned short id, std::vector<unsigned char> &data);
 	bool sendBroadcast(std::vector<unsigned char> &data);
+	std::string getBroadcastType() const;
 	void stop();
 	void listen();
 	// If false, RC stoppend listen
@@ -36,6 +35,7 @@ private:
 	MessageReceiver* handler;
 	MessageSender* sender;
 	std::map<unsigned short, sockaddr_in> configMap;
+	std::string broadcastType;
 	BlockingQueue<std::pair<bool,std::vector<unsigned char>>> messageQueue;
 	DatagramController datagramController;
 

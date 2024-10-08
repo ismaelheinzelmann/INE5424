@@ -92,3 +92,13 @@ void ConfigParser::parseConfiguration(const std::string &nodeString, std::map<un
 	node.sin_family = AF_INET;
 	nodes->insert({id, node});
 }
+
+std::string ConfigParser::parseBroadcast(const std::string &configFilePath)
+{
+    const std::string cleanFileString = cleanFile(configFilePath);
+    const std::string searchOption = "broadcast";
+    const size_t broadcastStartPos = cleanFileString.find(searchOption) + searchOption.length();
+    const size_t equalSignPos = cleanFileString.find('=', broadcastStartPos) + 1;
+    const size_t semicolonPos = cleanFileString.find(';', equalSignPos);
+    return cleanFileString.substr(equalSignPos, semicolonPos - equalSignPos);
+}

@@ -45,23 +45,25 @@ int main(int argc, char *argv[])
 
 	while (g_running)
 	{
-		// rb.printNodes(&g_lock);
+		rb.printNodes(&g_lock);
+		// Exemplo Broadcast Type
+		std::string bcType = rb.getBroadcastType();
+		std::cout << "Broadcast type: " << bcType << std::endl;
 		std::string message = std::string(), idString = std::string();
-		// std::cout << "Choose which node you want to send the message, or -1 to end the program:" << std::endl;
-		// std::cin >> idString;
-		// if (idString == "-1")
-		// {
-		// 	rb.stop();
-		// 	g_running = false;
-		// 	break;
-		// }
+		std::cout << "Choose which node you want to send the message, or -1 to end the program:" << std::endl;
+		std::cin >> idString;
+		if (idString == "-1")
+		{
+			rb.stop();
+			g_running = false;
+			break;
+		}
 		std::cout << "Write the message:" << std::endl;
-		// std::cin.ignore();
+		std::cin.ignore();
 		std::getline(std::cin, message);
 		std::vector<unsigned char> messageBytes(message.begin(), message.end());
         auto before = std::chrono::system_clock::now();
-		std::string resp = rb.sendBroadcast(messageBytes)
-		// std::string resp = rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes)
+		std::string resp = rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes)
 			? "Message sent successfully."
 			: "Failed sending message.";
 		Logger::log("Time spent: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - before).count()) + "ms", LogLevel::INFO);
