@@ -41,7 +41,7 @@ private:
 	std::thread processingThread;
 	std::thread processingBroadcastThread;
 
-	bool verifyOrigin(sockaddr_in* senderAddr);
+	bool verifyOrigin(Datagram *datagram);
 	bool verifyOriginBroadcast(int requestSourcePort);
 	void processDatagram();
 	void processBroadcastDatagram();

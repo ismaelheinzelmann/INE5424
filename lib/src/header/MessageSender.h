@@ -11,11 +11,7 @@
 class MessageSender{
 public:
 	explicit MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr);
-	static void buildDatagrams(std::vector<std::vector<unsigned char>>* datagrams,
-	                           std::map<unsigned short, bool>* acknowledgments,
-	                           std::map<unsigned short, bool>* responses,
-	                           in_port_t transientPort, unsigned short totalDatagrams,
-	                           std::vector<unsigned char>& message);
+
 	~MessageSender() = default;
 	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
 	bool sendBroadcast(std::vector<unsigned char> &message);
@@ -27,6 +23,11 @@ private:
 	sockaddr_in configAddr;
 	std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	unsigned short calculateTotalDatagrams(unsigned int dataLength);
+	void buildDatagrams(std::vector<std::vector<unsigned char>>* datagrams,
+				   std::map<unsigned short, bool>* acknowledgments,
+				   std::map<unsigned short, bool>* responses,
+				   in_port_t transientPort, unsigned short totalDatagrams,
+				   std::vector<unsigned char>& message);
 	bool ackAttempts(int transientSocketfd, sockaddr_in& destin, Datagram* datagram, bool isBroadcast = false);
 };
 

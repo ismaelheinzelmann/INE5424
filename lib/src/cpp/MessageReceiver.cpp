@@ -76,10 +76,10 @@ bool MessageReceiver::verifyMessage(Request *request) {
 }
 
 void MessageReceiver::handleMessage(Request *request, int socketfd) {
-	if (!verifyMessage(request)) {
-		sendDatagramNACK(request, socketfd);
-		return;
-	}
+	// if (!verifyMessage(request)) {
+	// 	sendDatagramNACK(request, socketfd);
+	// 	return;
+	// }
 	if ((request->datagram->isACK() && request->datagram->isSYN()) || request->datagram->isFIN())
 		return;
 	if (request->datagram->isSYN() && !request->datagram->isACK()) {
@@ -92,7 +92,7 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd) {
 	auto *message = new Message(request->datagram->getDatagramTotal());
-	request->clientRequest->sin_port = request->datagram->getSourcePort();
+	request->clientRequest->sin_port = request->datagram->getDestinationPort();
 	auto identifier = getIdentifier(request->clientRequest);
 	std::lock_guard lock(messagesMutex);
 	messages[identifier] = message;
@@ -100,7 +100,7 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd) {
 }
 
 void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
-	request->clientRequest->sin_port = request->datagram->getSourcePort();
+	request->clientRequest->sin_port = request->datagram->getDestinationPort();
 	std::shared_lock lock(messagesMutex);
 	Message *message = getMessage(request->clientRequest);
 	if (message == nullptr) {

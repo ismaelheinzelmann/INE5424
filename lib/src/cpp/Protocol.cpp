@@ -17,6 +17,17 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	// TODO Refatorar
 	std::vector<unsigned char> serializedDatagram;
 
+	unsigned int tempInt = datagram->getSourceAddress();
+	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 24) & 0xFF));
+	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 16) & 0xFF));
+	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 8) & 0xFF));
+	serializedDatagram.push_back(static_cast<unsigned char>(tempInt & 0xFF));
+	tempInt = datagram->getDestinAddress();
+	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 24) & 0xFF));
+	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 16) & 0xFF));
+	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 8) & 0xFF));
+	serializedDatagram.push_back(static_cast<unsigned char>(tempInt & 0xFF));
+
 	unsigned short temp = datagram->getSourcePort();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
@@ -47,10 +58,10 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 
 void Protocol::setChecksum(std::vector<unsigned char> *data) {
 	auto checksum = sumChecksum32(data);
-	(*data)[15] = static_cast<unsigned char>(checksum & 0xFF);
-	(*data)[14] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
-	(*data)[13] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
-	(*data)[12] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
+	(*data)[20] = static_cast<unsigned char>(checksum & 0xFF);
+	(*data)[21] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
+	(*data)[22] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
+	(*data)[23] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
 }
 
 // Deserializes data and returns a Datagram object.
@@ -59,7 +70,7 @@ Datagram Protocol::deserialize(std::vector<unsigned char> &serializedDatagram) {
 	bufferToDatagram(datagram, serializedDatagram);
 	std::vector<unsigned char> data;
 	for (unsigned int i = 0; i < datagram.getDataLength(); i++) {
-		data.push_back(serializedDatagram[i + 16]);
+		data.push_back(serializedDatagram[i + 24]);
 	}
 	datagram.setData(data);
 	return datagram;
@@ -67,10 +78,10 @@ Datagram Protocol::deserialize(std::vector<unsigned char> &serializedDatagram) {
 
 // Computes the checksum of a datagram, the checksum field will be zero while computing.
 unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDatagram) {
-	(*serializedDatagram)[12] = 0;
-	(*serializedDatagram)[13] = 0;
-	(*serializedDatagram)[14] = 0;
-	(*serializedDatagram)[15] = 0;
+	(*serializedDatagram)[20] = 0;
+	(*serializedDatagram)[21] = 0;
+	(*serializedDatagram)[22] = 0;
+	(*serializedDatagram)[23] = 0;
 	return sumChecksum32(serializedDatagram);
 }
 
@@ -145,19 +156,21 @@ bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr
 	if (bytes_received < 0)
 		return false;
 	bufferToDatagram(*datagramBuff, *buff);
-	const std::vector dataVec(buff->begin() + 16, buff->begin() + 16 + datagramBuff->getDataLength());
+	const std::vector dataVec(buff->begin() + 24, buff->begin() + 24 + datagramBuff->getDataLength());
 	datagramBuff->setData(dataVec);
 	return true;
 }
 
 void Protocol::bufferToDatagram(Datagram &datagramBuff, const std::vector<unsigned char> &bytesBuffer) {
-	datagramBuff.setSourcePort(TypeUtils::buffToUnsignedShort(bytesBuffer, 0));
-	datagramBuff.setDestinationPort(TypeUtils::buffToUnsignedShort(bytesBuffer, 2));
-	datagramBuff.setVersion(TypeUtils::buffToUnsignedShort(bytesBuffer, 4));
-	datagramBuff.setDatagramTotal(TypeUtils::buffToUnsignedShort(bytesBuffer, 6));
-	datagramBuff.setDataLength(TypeUtils::buffToUnsignedShort(bytesBuffer, 8));
-	datagramBuff.setFlags(TypeUtils::buffToUnsignedShort(bytesBuffer, 10));
-	datagramBuff.setChecksum(TypeUtils::buffToUnsignedInt(bytesBuffer, 12));
+	datagramBuff.setSourceAddress(TypeUtils::buffToUnsignedInt(bytesBuffer, 0));
+	datagramBuff.setDestinAddress(TypeUtils::buffToUnsignedInt(bytesBuffer, 4));
+	datagramBuff.setSourcePort(TypeUtils::buffToUnsignedShort(bytesBuffer, 8));
+	datagramBuff.setDestinationPort(TypeUtils::buffToUnsignedShort(bytesBuffer, 10));
+	datagramBuff.setVersion(TypeUtils::buffToUnsignedShort(bytesBuffer, 12));
+	datagramBuff.setDatagramTotal(TypeUtils::buffToUnsignedShort(bytesBuffer, 14));
+	datagramBuff.setDataLength(TypeUtils::buffToUnsignedShort(bytesBuffer, 16));
+	datagramBuff.setFlags(TypeUtils::buffToUnsignedShort(bytesBuffer, 18));
+	datagramBuff.setChecksum(TypeUtils::buffToUnsignedInt(bytesBuffer, 20));
 }
 
 bool Protocol::sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, Flags *flags) {

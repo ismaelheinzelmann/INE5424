@@ -17,7 +17,9 @@
 class Datagram {
 public:
 	Datagram();
+	void setSourceAddress(unsigned int port);
 	void setSourcePort(unsigned short port);
+	void setDestinAddress(unsigned int port);
 	void setDestinationPort(unsigned short port);
 	void setVersion(unsigned short version);
 	void setDatagramTotal(unsigned short datagramTotal);
@@ -26,7 +28,9 @@ public:
 	void setChecksum(unsigned int checksum);
 	void setData(std::vector<unsigned char> data);
 
+	unsigned int getSourceAddress();
 	unsigned short getSourcePort();
+	unsigned int getDestinAddress();
 	unsigned short getDestinationPort();
 	unsigned short getVersion();
 	unsigned short getDatagramTotal();
@@ -54,6 +58,8 @@ public:
 	unsigned short setBit(unsigned short value, int bitPosition);
 
 private:
+	unsigned int sourceAddress;
+	unsigned int destinAddress;
 	unsigned short sourcePort;
 	unsigned short destinPort;
 	unsigned short version; // Current datagram of the message

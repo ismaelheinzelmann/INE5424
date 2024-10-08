@@ -128,17 +128,16 @@ void ReliableCommunication::processDatagram() {
 	while (true) {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
-		auto buffer = std::vector<unsigned char>(1040);
+		auto buffer = std::vector<unsigned char>(1048);
 		Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer);
-		buffer.resize(16 + datagram.getDataLength());
-		if (!verifyOrigin(&senderAddr)) {
+		buffer.resize(24 + datagram.getDataLength());
+		if (!verifyOrigin(&datagram)) {
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);
 			continue;
 		}
 		Logger::log("Datagram received.", LogLevel::DEBUG);
-		if (datagram.isEND() && senderAddr.sin_family == this->configMap[id].sin_family &&
-			senderAddr.sin_port == this->configMap[id].sin_port &&
-			senderAddr.sin_addr.s_addr == this->configMap[id].sin_addr.s_addr) {
+		if (datagram.isEND() && datagram.getSourcePort() == this->configMap[id].sin_port &&
+			datagram.getSourceAddress() == this->configMap[id].sin_addr.s_addr) {
 			process = false;
 			return;
 		}
@@ -152,10 +151,10 @@ void ReliableCommunication::processBroadcastDatagram() {
 	while (true) {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
-		auto buffer = std::vector<unsigned char>(1040);
+		auto buffer = std::vector<unsigned char>(1048);
 		Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer);
 		Logger::log("Broadcast Received.", LogLevel::DEBUG);
-		buffer.resize(16 + datagram.getDataLength());
+		buffer.resize(24 + datagram.getDataLength());
 		if (!verifyOriginBroadcast(datagram.getSourcePort()))
 		{
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);
@@ -183,9 +182,9 @@ void ReliableCommunication::printNodes(std::mutex *printLock) const {
 }
 
 
-bool ReliableCommunication::verifyOrigin(sockaddr_in *senderAddr) {
+bool ReliableCommunication::verifyOrigin(Datagram *datagram) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
-		if (senderAddr->sin_addr.s_addr == nodeAddr.sin_addr.s_addr && senderAddr->sin_port == nodeAddr.sin_port) {
+		if (datagram->getSourceAddress() == nodeAddr.sin_addr.s_addr && datagram->getSourcePort() == nodeAddr.sin_port) {
 			return true;
 		}
 	}

@@ -2,6 +2,8 @@
 #include "../header/Datagram.h"
 
 Datagram::Datagram() {
+	this->sourceAddress = 0;
+	this->destinAddress = 0;
 	this->sourcePort = 0;
 	this->destinPort = 0;
 	this->version = 0;
@@ -12,7 +14,11 @@ Datagram::Datagram() {
 	this->data = std::vector<unsigned char>();
 }
 
+void Datagram::setSourceAddress(unsigned int address) { this->sourceAddress = address; }
+
 void Datagram::setSourcePort(unsigned short port) { this->sourcePort = port; }
+
+void Datagram::setDestinAddress(unsigned int address) { this->destinAddress = address; }
 
 void Datagram::setDestinationPort(unsigned short port) { this->destinPort = port; }
 
@@ -28,7 +34,11 @@ void Datagram::setChecksum(unsigned int checksum) { this->checksum = checksum; }
 
 void Datagram::setData(std::vector<unsigned char> data) { this->data = data; }
 
+unsigned int Datagram::getSourceAddress() { return this->sourceAddress; }
+
 unsigned short Datagram::getSourcePort() { return this->sourcePort; }
+
+unsigned int Datagram::getDestinAddress() { return this->destinAddress; }
 
 unsigned short Datagram::getDestinationPort() { return this->destinPort; }
 

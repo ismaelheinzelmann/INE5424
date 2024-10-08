@@ -37,7 +37,9 @@ void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *data
 								   unsigned short totalDatagrams, std::vector<unsigned char> &message) {
 	for (int i = 0; i < totalDatagrams; ++i) {
 		auto versionDatagram = Datagram();
-		versionDatagram.setSourcePort(transientPort);
+		versionDatagram.setSourceAddress(configAddr.sin_addr.s_addr);
+		versionDatagram.setSourcePort(configAddr.sin_port);
+		versionDatagram.setDestinationPort(transientPort);
 		versionDatagram.setVersion(i + 1);
 		versionDatagram.setDatagramTotal(totalDatagrams);
 		for (unsigned short j = 0; j < 1024; j++) {
@@ -60,7 +62,10 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
 	datagram.setDatagramTotal(totalDatagrams);
-	datagram.setSourcePort(transientSocketFd.second.sin_port);
+	datagram.setSourceAddress(configAddr.sin_addr.s_addr);
+	datagram.setSourcePort(configAddr.sin_port);
+	datagram.setDestinationPort(transientSocketFd.second.sin_port);
+
 	bool accepted = ackAttempts(transientSocketFd.first, destin, &datagram);
 	if (!accepted) {
 		return false;
@@ -73,7 +78,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 
 	unsigned short batchSize = BATCH_SIZE, sent = 0, acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
-	std::vector<unsigned char> buff = std::vector<unsigned char>(1040);
+	std::vector<unsigned char> buff = std::vector<unsigned char>(1048);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
 		Datagram response;
 
@@ -175,6 +180,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
 	datagram.setDatagramTotal(totalDatagrams);
+	datagram.setSourceAddress(configAddr.sin_addr.s_addr);
 	datagram.setSourcePort(configAddr.sin_port);
 
 	sockaddr_in destin = broadcastAddress();
@@ -189,7 +195,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	std::map<unsigned short, bool> acknowledgments, responses;
 	buildDatagrams(&datagrams, &acknowledgments, &responses, 1, totalDatagrams, message);
 
-	auto buff = std::vector<unsigned char>(1040);
+	auto buff = std::vector<unsigned char>(1048);
 
 	if (sendto(broadcastFD, datagrams[0].data(), datagrams[0].size(), 0, reinterpret_cast<sockaddr *>(&destin),
 			   sizeof(destin)) < 0) {
@@ -251,7 +257,7 @@ bool MessageSender::ackAttempts(int transientSocketfd, sockaddr_in &destin, Data
 		flags.BROADCAST = true;
 	Datagram response;
 	Protocol::setFlags(datagram, &flags);
-	auto buff = std::vector<unsigned char>(1040);
+	auto buff = std::vector<unsigned char>(1048);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
 		bool sent = Protocol::sendDatagram(datagram, &destin, isBroadcast ? broadcastFD : socketFD, &flags);
