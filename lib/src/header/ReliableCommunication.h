@@ -20,6 +20,7 @@ public:
 	ReliableCommunication(std::string configFilePath, unsigned short nodeID);
 	~ReliableCommunication();
 	void printNodes(std::mutex* printLock) const;
+	std::string getBroadcastType() const;
 	bool send(unsigned short id, std::vector<unsigned char>& data);
 	void stop();
 	void listen();
@@ -33,6 +34,7 @@ private:
 	MessageReceiver* handler;
 	MessageSender* sender;
 	std::map<unsigned short, sockaddr_in> configMap;
+	std::string broadcastType;
 	BlockingQueue<std::pair<bool,std::vector<unsigned char>>> messageQueue;
 	BlockingQueue<Request*> requestQueue;
 

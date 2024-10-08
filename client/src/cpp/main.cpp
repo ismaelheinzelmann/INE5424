@@ -46,6 +46,9 @@ int main(int argc, char *argv[])
 	while (g_running)
 	{
 		rb.printNodes(&g_lock);
+		// Exemplo Broadcast Type
+		std::string bcType = rb.getBroadcastType();
+		std::cout << "Broadcast type: " << bcType << std::endl;
 		std::string message = std::string(), idString = std::string();
 		std::cout << "Choose which node you want to send the message, or -1 to end the program:" << std::endl;
 		std::cin >> idString;

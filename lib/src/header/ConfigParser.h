@@ -11,6 +11,7 @@ class ConfigParser
 public:
     ConfigParser() = delete;
     static std::map<unsigned short, sockaddr_in> parseNodes(const std::string& cleansedConfigString);
+    static std::string parseBroadcast(const std::string& cleansedConfigString);
 
 private:
     static std::string cleanFile(const std::string& configFilePath);
