@@ -104,9 +104,9 @@ void ReliableCommunication::processDatagram()
 	{
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
-		auto buffer = std::vector<unsigned char>(1040);
+		auto buffer = std::vector<unsigned char>(1048);
 		Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer);
-		buffer.resize(16 + datagram.getDataLength());
+		buffer.resize(24 + datagram.getDataLength());
 		if (!verifyOrigin(&senderAddr))
 		{
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);

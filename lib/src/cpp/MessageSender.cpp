@@ -80,7 +80,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	unsigned short sent = 0;
 	unsigned short acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
-	std::vector<unsigned char> buff = std::vector<unsigned char>(1040);
+	std::vector<unsigned char> buff = std::vector<unsigned char>(1048);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++)
 	{
 		Datagram response;
@@ -232,7 +232,7 @@ bool MessageSender::ackAttempts(int transientSocketfd, sockaddr_in &destin, Data
 	flags.SYN = true;
 	Datagram response;
 	Protocol::setFlags(datagram, &flags);
-	auto buff = std::vector<unsigned char>(1040);
+	auto buff = std::vector<unsigned char>(1048);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i)
 	{

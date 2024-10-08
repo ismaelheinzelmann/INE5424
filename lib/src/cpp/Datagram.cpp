@@ -1,8 +1,9 @@
 
 #include "../header/Datagram.h"
 
-Datagram::Datagram()
-{
+Datagram::Datagram() {
+	this->sourceAddress = 0;
+	this->destinAddress = 0;
 	this->sourcePort = 0;
 	this->destinPort = 0;
 	this->version = 0;
@@ -13,144 +14,76 @@ Datagram::Datagram()
 	this->data = std::vector<unsigned char>();
 }
 
-void Datagram::setSourcePort(unsigned short port)
-{
-	this->sourcePort = port;
-}
+void Datagram::setSourceAddress(unsigned int address) { this->sourceAddress = address; }
 
-void Datagram::setDestinationPort(unsigned short port)
-{
-	this->destinPort = port;
-}
+void Datagram::setSourcePort(unsigned short port) { this->sourcePort = port; }
 
-void Datagram::setVersion(unsigned short version)
-{
-	this->version = version;
-}
+void Datagram::setDestinAddress(unsigned int address) { this->destinAddress = address; }
 
-void Datagram::setDatagramTotal(unsigned short datagramTotal)
-{
-	this->datagramTotal = datagramTotal;
-}
+void Datagram::setDestinationPort(unsigned short port) { this->destinPort = port; }
 
-void Datagram::setDataLength(unsigned short dataLength)
-{
-	this->dataLength = dataLength;
-}
+void Datagram::setVersion(unsigned short version) { this->version = version; }
 
-void Datagram::setFlags(unsigned short flags)
-{
-	this->flags = flags;
-}
+void Datagram::setDatagramTotal(unsigned short datagramTotal) { this->datagramTotal = datagramTotal; }
 
-void Datagram::setChecksum(unsigned int checksum)
-{
-	this->checksum = checksum;
-}
+void Datagram::setDataLength(unsigned short dataLength) { this->dataLength = dataLength; }
 
-void Datagram::setData(std::vector<unsigned char> data)
-{
-	this->data = data;
-}
+void Datagram::setFlags(unsigned short flags) { this->flags = flags; }
 
-unsigned short Datagram::getSourcePort()
-{
-	return this->sourcePort;
-}
+void Datagram::setChecksum(unsigned int checksum) { this->checksum = checksum; }
 
-unsigned short Datagram::getDestinationPort()
-{
-	return this->destinPort;
-}
+void Datagram::setData(std::vector<unsigned char> data) { this->data = data; }
 
-unsigned short Datagram::getVersion()
-{
-	return this->version;
-}
+unsigned int Datagram::getSourceAddress() { return this->sourceAddress; }
 
-unsigned short Datagram::getDatagramTotal()
-{
-	return this->datagramTotal;
-}
+unsigned short Datagram::getSourcePort() { return this->sourcePort; }
 
-unsigned short Datagram::getDataLength()
-{
-	return this->dataLength;
-}
+unsigned int Datagram::getDestinAddress() { return this->destinAddress; }
 
-unsigned short Datagram::getFlags()
-{
-	return this->flags;
-}
+unsigned short Datagram::getDestinationPort() { return this->destinPort; }
+
+unsigned short Datagram::getVersion() { return this->version; }
+
+unsigned short Datagram::getDatagramTotal() { return this->datagramTotal; }
+
+unsigned short Datagram::getDataLength() { return this->dataLength; }
+
+unsigned short Datagram::getFlags() { return this->flags; }
 
 unsigned int Datagram::getChecksum() { return this->checksum; }
 
-std::vector<unsigned char> *Datagram::getData()
-{
-	return &this->data;
-}
+std::vector<unsigned char> *Datagram::getData() { return &this->data; }
 
-bool Datagram::isBitSet(unsigned short value, int bitPosition)
-{
+bool Datagram::isBitSet(unsigned short value, int bitPosition) {
 	short bitmask = 1 << bitPosition;
 	return (value & bitmask) != 0;
 }
 
-unsigned short Datagram::setBit(unsigned short value, int bitPosition)
-{
+unsigned short Datagram::setBit(unsigned short value, int bitPosition) {
 	short bitmask = 1 << bitPosition;
 	return value | bitmask;
 }
 
-bool Datagram::isACK()
-{
-	return this->isBitSet(this->getFlags(), 0);
-}
+bool Datagram::isACK() { return this->isBitSet(this->getFlags(), 0); }
 
-bool Datagram::isSYN()
-{
-	return this->isBitSet(this->getFlags(), 1);
-}
+bool Datagram::isSYN() { return this->isBitSet(this->getFlags(), 1); }
 
-bool Datagram::isNACK()
-{
-	return this->isBitSet(this->getFlags(), 2);
-}
+bool Datagram::isNACK() { return this->isBitSet(this->getFlags(), 2); }
 
-bool Datagram::isFIN()
-{
-	return this->isBitSet(this->getFlags(), 3);
-}
+bool Datagram::isFIN() { return this->isBitSet(this->getFlags(), 3); }
 
-bool Datagram::isEND()
-{
-	return this->isBitSet(this->getFlags(), 10);
-}
+bool Datagram::isBROADCAST() { return this->isBitSet(this->getFlags(), 4); }
 
+bool Datagram::isEND() { return this->isBitSet(this->getFlags(), 10); }
 
-void Datagram::setIsACK()
-{
-	this->setFlags(this->setBit(this->getFlags(), 0));
-}
+void Datagram::setIsACK() { this->setFlags(this->setBit(this->getFlags(), 0)); }
 
-void Datagram::setIsSYN()
-{
-	this->setFlags(this->setBit(this->getFlags(), 1));
-}
+void Datagram::setIsSYN() { this->setFlags(this->setBit(this->getFlags(), 1)); }
 
-void Datagram::setIsNACK()
-{
-	this->setFlags(this->setBit(this->getFlags(), 2));
-}
+void Datagram::setIsNACK() { this->setFlags(this->setBit(this->getFlags(), 2)); }
 
-void Datagram::setIsFIN()
-{
-	this->setFlags(this->setBit(this->getFlags(), 3));
-}
+void Datagram::setIsFIN() { this->setFlags(this->setBit(this->getFlags(), 3)); }
 
-void Datagram::setIsEND()
-{
-	this->setFlags(this->setBit(this->getFlags(), 10));
-}
+void Datagram::setIsBROADCAST() { this->setFlags(this->setBit(this->getFlags(), 4)); }
 
-
+void Datagram::setIsEND() { this->setFlags(this->setBit(this->getFlags(), 10)); }

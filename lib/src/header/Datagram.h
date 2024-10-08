@@ -10,14 +10,16 @@
 // - Version: The current datagram of the message.
 // - Datagram total: How many datagrams compose the message.
 // - Data length: Length of the current datagram.
-// - Acknowledgement: If acknowledge, the first byte of data is the aknowledge number (which datagram is confirming), the rest can be discarded.
+// - Acknowledgement: If acknowledge, the first byte of data is the aknowledge number (which datagram is confirming),
+// the rest can be discarded.
 // - Checksum: Apply constant mask for the field at the checksum generation, using CRC32.
 // - Data: The data of the datagram.
-class Datagram
-{
+class Datagram {
 public:
 	Datagram();
+	void setSourceAddress(unsigned int port);
 	void setSourcePort(unsigned short port);
+	void setDestinAddress(unsigned int port);
 	void setDestinationPort(unsigned short port);
 	void setVersion(unsigned short version);
 	void setDatagramTotal(unsigned short datagramTotal);
@@ -26,14 +28,16 @@ public:
 	void setChecksum(unsigned int checksum);
 	void setData(std::vector<unsigned char> data);
 
+	unsigned int getSourceAddress();
 	unsigned short getSourcePort();
+	unsigned int getDestinAddress();
 	unsigned short getDestinationPort();
 	unsigned short getVersion();
 	unsigned short getDatagramTotal();
 	unsigned short getDataLength();
 	unsigned short getFlags();
 	unsigned int getChecksum();
-	std::vector<unsigned char>* getData();
+	std::vector<unsigned char> *getData();
 
 	// Flag based
 	bool isACK(); // First bit
@@ -41,17 +45,21 @@ public:
 	bool isNACK(); // Third bit
 	bool isFIN();
 	bool isEND();
+	bool isBROADCAST();
 	void setIsACK();
 	void setIsSYN();
 	void setIsNACK();
 	void setIsFIN();
 	void setIsEND();
+	void setIsBROADCAST();
 
 
 	bool isBitSet(unsigned short value, int bitPosition);
 	unsigned short setBit(unsigned short value, int bitPosition);
 
 private:
+	unsigned int sourceAddress;
+	unsigned int destinAddress;
 	unsigned short sourcePort;
 	unsigned short destinPort;
 	unsigned short version; // Current datagram of the message
@@ -62,4 +70,4 @@ private:
 	std::vector<unsigned char> data;
 };
 
-#endif //DATAGRAM_H
+#endif // DATAGRAM_H

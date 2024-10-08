@@ -88,11 +88,11 @@ bool MessageReceiver::verifyMessage(Request *request)
 
 void MessageReceiver::handleMessage(Request *request, int socketfd)
 {
-	if (!verifyMessage(request))
-	{
-		sendDatagramNACK(request, socketfd);
-		return;
-	}
+	// if (!verifyMessage(request))
+	// {
+	// 	sendDatagramNACK(request, socketfd);
+	// 	return;
+	// }
 	if ((request->datagram->isACK() && request->datagram->isSYN()) || request->datagram->isFIN())
 		return;
 	if (request->datagram->isSYN() && !request->datagram->isACK())
