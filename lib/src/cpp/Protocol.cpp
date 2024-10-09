@@ -20,6 +20,7 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 16) & 0xFF));
 	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 8) & 0xFF));
 	serializedDatagram.push_back(static_cast<unsigned char>(tempInt & 0xFF));
+
 	tempInt = datagram->getDestinAddress();
 	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 24) & 0xFF));
 	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 16) & 0xFF));
@@ -33,6 +34,7 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	temp = datagram->getDestinationPort();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
+
 	temp = datagram->getVersion();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
@@ -40,9 +42,11 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	temp = datagram->getDatagramTotal();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
+
 	temp = datagram->getDataLength();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
+
 	temp = datagram->getFlags();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
@@ -56,10 +60,10 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 
 void Protocol::setChecksum(std::vector<unsigned char> *data) {
 	auto checksum = sumChecksum32(data);
-	(*data)[20] = static_cast<unsigned char>(checksum & 0xFF);
-	(*data)[21] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
-	(*data)[22] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
-	(*data)[23] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
+	(*data)[23] = static_cast<unsigned char>(checksum & 0xFF);
+	(*data)[22] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
+	(*data)[21] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
+	(*data)[20] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
 }
 
 // Deserializes data and returns a Datagram object.

@@ -1,7 +1,6 @@
 #include "../header/MessageSender.h"
 #include <cmath>
 #include <iostream>
-#include <mutex>
 #include <netinet/in.h>
 #include <stdexcept>
 #include <sys/socket.h>
@@ -173,20 +172,17 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 }
 
 bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
-	// std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 
-	// int opt = 1;
-	//    if (setsockopt(transientSocketFd.first, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)) < 0) {
-	//        perror("setsockopt failed");
-	//        close(transientSocketFd.first);
-	//        return false;
-	//    }
+	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
 	datagram.setDatagramTotal(totalDatagrams);
 	datagram.setSourceAddress(configAddr.sin_addr.s_addr);
 	datagram.setSourcePort(configAddr.sin_port);
+	datagram.setDestinationPort(transientSocketFd.second.sin_port);
+
+	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
 
 	sockaddr_in destin = broadcastAddress();
 

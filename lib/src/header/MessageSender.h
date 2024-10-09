@@ -23,7 +23,7 @@ public:
 private:
 	int socketFD;
 	int broadcastFD;
-	sockaddr_in configAddr;
+	sockaddr_in configAddr{};
 	DatagramController *datagramController;
 	std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	unsigned short calculateTotalDatagrams(unsigned int dataLength);
