@@ -25,9 +25,11 @@
 #define TIMEOUT_INCREMENT 200
 #define BATCH_SIZE 30
 
-MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr) {
+MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
+							 DatagramController *datagramController) {
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
+	this->datagramController = datagramController;
 	configAddr = configIdAddr;
 }
 
@@ -65,8 +67,9 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	datagram.setSourceAddress(configAddr.sin_addr.s_addr);
 	datagram.setSourcePort(configAddr.sin_port);
 	datagram.setDestinationPort(transientSocketFd.second.sin_port);
+	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
 
-	bool accepted = ackAttempts(transientSocketFd.first, destin, &datagram);
+	bool accepted = ackAttempts(destin, &datagram);
 	if (!accepted) {
 		return false;
 	}
@@ -80,7 +83,6 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
 	std::vector<unsigned char> buff = std::vector<unsigned char>(1048);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
-		Datagram response;
 
 		unsigned short batchIndex, batchAck = 0;
 		if (sent == totalDatagrams) {
@@ -100,42 +102,45 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 				sendto(socketFD, datagrams[batchIndex].data(), datagrams[batchIndex].size(), 0,
 					   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
-			while (Protocol::readDatagramSocketTimeout(&response, transientSocketFd.first, &destin,
-													   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt,
-													   &buff)) {
+			while (true) {
+				Datagram *response =
+					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
+														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
+				if (response == nullptr)
+					break;
 				// Resposta de outro batch, pode ser descartada.
-				if (response.getVersion() - 1 < batchStart * batchSize ||
-					response.getVersion() - 1 > (batchStart * batchSize) + batchSize) {
+				if (response->getVersion() - 1 < batchStart * batchSize ||
+					response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
 					Logger::log("Received old response.", LogLevel::DEBUG);
 					continue;
 				}
 				// Armazena informação de ACK recebido.
-				if (response.getVersion() - 1 <= totalDatagrams && response.isACK() &&
-					!acknowledgments[response.getVersion() - 1]) {
-					Logger::log("Datagram of version " + std::to_string(response.getVersion()) + " accepted.",
+				if (response->getVersion() - 1 <= totalDatagrams && response->isACK() &&
+					!acknowledgments[response->getVersion() - 1]) {
+					Logger::log("Datagram of version " + std::to_string(response->getVersion()) + " accepted.",
 								LogLevel::DEBUG);
-					acknowledgments[response.getVersion() - 1] = true;
-					responses[response.getVersion() - 1] = true;
+					acknowledgments[response->getVersion() - 1] = true;
+					responses[response->getVersion() - 1] = true;
 					batchAck++;
 					sent++;
 					acks++;
 				}
 
 				// Conexão finalizada, com ou sem sucesso.
-				if (response.isACK() && response.isFIN()) {
+				if (response->isACK() && response->isFIN()) {
 					Logger::log("Peer ended connection with success at receiving message.", LogLevel::DEBUG);
 					close(transientSocketFd.first);
 					return true;
 				}
-				if (response.isFIN()) {
+				if (response->isFIN()) {
 					Logger::log("Peer ended connection.", LogLevel::DEBUG);
 					close(transientSocketFd.first);
 					return false;
 				}
 
 				// Informa que a versão foi negada.
-				if (response.isNACK()) {
-					responses[response.getVersion() - 1] = true;
+				if (response->isNACK()) {
+					responses[response->getVersion() - 1] = true;
 				}
 
 				// Batch acordado, procede para o proximo batch
@@ -185,7 +190,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 	sockaddr_in destin = broadcastAddress();
 
-	bool accepted = ackAttempts(broadcastFD, destin, &datagram, true);
+	bool accepted = ackAttempts(destin, &datagram, true);
 	if (!accepted) {
 		return false;
 	}
@@ -203,8 +208,8 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 		return true;
 	}
 
-	bool responded = Protocol::readDatagramSocketTimeout(&datagram, broadcastFD, &destin, 0, &buff);
-	return responded;
+	// bool responded = Protocol::readDatagramSocketTimeout(&datagram, broadcastFD, &destin, 0, &buff);
+	return false;
 }
 
 sockaddr_in MessageSender::broadcastAddress() {
@@ -250,32 +255,33 @@ unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength) {
 	return static_cast<int>(ceil(result));
 }
 
-bool MessageSender::ackAttempts(int transientSocketfd, sockaddr_in &destin, Datagram *datagram, bool isBroadcast) {
+bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram, bool isBroadcast) {
 	Flags flags;
 	flags.SYN = true;
 	if (isBroadcast)
 		flags.BROADCAST = true;
-	Datagram response;
 	Protocol::setFlags(datagram, &flags);
 	auto buff = std::vector<unsigned char>(1048);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
 		bool sent = Protocol::sendDatagram(datagram, &destin, isBroadcast ? broadcastFD : socketFD, &flags);
 		if (!sent) {
-			Logger::log("Failed sending ACK datagram.", LogLevel::INFO);
+			Logger::log("Failed sending ACK datagram.", LogLevel::WARNING);
 			continue;
 		}
-		sockaddr_in senderAddr{};
-		senderAddr.sin_family = AF_INET;
-		sent = Protocol::readDatagramSocketTimeout(&response, transientSocketfd, &senderAddr,
-												   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i, &buff);
-		if (!sent)
+		Datagram *response =
+			datagramController->getDatagramTimeout({datagram->getSourceAddress(), datagram->getDestinationPort()},
+												   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
+
+		if (response == nullptr) {
+			Logger::log("ACK Timedout.", LogLevel::WARNING);
 			continue;
-		if (response.isACK() && response.isSYN() && datagram->getVersion() == response.getVersion()) {
+		}
+		if (response->isACK() && response->isSYN() && datagram->getVersion() == response->getVersion()) {
 			return true;
 		}
 	}
-	Logger::log("ACK failed.", LogLevel::INFO);
+	Logger::log("ACK failed.", LogLevel::WARNING);
 
 	return false;
 }

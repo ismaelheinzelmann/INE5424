@@ -1,21 +1,21 @@
 #include "../header/MessageReceiver.h"
 
-#include <Logger.h>
-#include <Request.h>
 #include <cassert>
 #include <iostream>
+#include "Logger.h"
+#include "Request.h"
 
 #include <map>
 #include <shared_mutex>
-#include "../header/BlockingQueue.h"
-#include "../header/Datagram.h"
-#include "../header/Protocol.h"
+#include "BlockingQueue.h"
+#include "Datagram.h"
+#include "Protocol.h"
 
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
-								 BlockingQueue<Request *> *requestQueue) {
+								 DatagramController *datagramController) {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
-	this->requestQueue = requestQueue;
+	this->datagramController = datagramController;
 	cleanseThread = std::thread([this] { cleanse(); });
 	cleanseThread.detach();
 }
@@ -76,33 +76,38 @@ bool MessageReceiver::verifyMessage(Request *request) {
 }
 
 void MessageReceiver::handleMessage(Request *request, int socketfd) {
-	// if (!verifyMessage(request)) {
-	// 	sendDatagramNACK(request, socketfd);
-	// 	return;
-	// }
-	if ((request->datagram->isACK() && request->datagram->isSYN()) || request->datagram->isFIN())
+	if (!verifyMessage(request)) {
+		sendDatagramNACK(request, socketfd);
 		return;
-	if (request->datagram->isSYN() && !request->datagram->isACK()) {
-		handleFirstMessage(request, socketfd);
 	}
-	else {
+
+	// Data datagram
+	if (request->datagram->getFlags() == 0) {
 		handleDataMessage(request, socketfd);
+		return;
+	}
+	if ((request->datagram->isSYN() && request->datagram->isACK()) ||
+		(request->datagram->isFIN() && request->datagram->isACK()) || request->datagram->isACK() ||
+		request->datagram->isNACK() || request->datagram->isFIN()) {
+		datagramController->insertDatagram(
+			{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}, request->datagram);
+		return;
+	}
+	if (request->datagram->isSYN()) {
+		handleFirstMessage(request, socketfd);
 	}
 }
 
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd) {
 	auto *message = new Message(request->datagram->getDatagramTotal());
-	request->clientRequest->sin_port = request->datagram->getDestinationPort();
-	auto identifier = getIdentifier(request->clientRequest);
 	std::lock_guard lock(messagesMutex);
-	messages[identifier] = message;
-	sendDatagramACK(request, socketfd);
+	messages[{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}] = message;
+	sendDatagramSYNACK(request, socketfd);
 }
 
 void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
-	request->clientRequest->sin_port = request->datagram->getDestinationPort();
 	std::shared_lock lock(messagesMutex);
-	Message *message = getMessage(request->clientRequest);
+	Message *message = getMessage(request->datagram);
 	if (message == nullptr) {
 		sendDatagramFIN(request, socketfd);
 		return;
@@ -130,18 +135,12 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
 
 
 // Should be used with read lock.
-Message *MessageReceiver::getMessage(sockaddr_in *from) {
-	std::pair<in_addr_t, in_port_t> identifier = getIdentifier(from);
+Message *MessageReceiver::getMessage(Datagram *datagram) {
+	std::pair<in_addr_t, in_port_t> identifier = {datagram->getSourceAddress(), datagram->getDestinationPort()};
 	if (messages.find(identifier) == messages.end()) {
 		return nullptr;
 	}
 	return messages[identifier];
-}
-
-std::pair<in_addr_t, in_port_t> MessageReceiver::getIdentifier(sockaddr_in *from) {
-	in_addr_t fromIP = from->sin_addr.s_addr;
-	in_port_t fromPort = from->sin_port;
-	return std::make_pair(fromIP, fromPort);
 }
 
 bool MessageReceiver::sendDatagramACK(Request *request, int socketfd) {
@@ -176,6 +175,16 @@ bool MessageReceiver::sendDatagramFINACK(Request *request, int socketfd) {
 	datagramFIN.setVersion(request->datagram->getVersion());
 	Flags flags;
 	flags.FIN = true;
+	flags.ACK = true;
+	Protocol::setFlags(&datagramFIN, &flags);
+	return Protocol::sendDatagram(request->datagram, request->clientRequest, socketfd, &flags);
+}
+
+bool MessageReceiver::sendDatagramSYNACK(Request *request, int socketfd) {
+	auto datagramFIN = Datagram();
+	datagramFIN.setVersion(request->datagram->getVersion());
+	Flags flags;
+	flags.SYN = true;
 	flags.ACK = true;
 	Protocol::setFlags(&datagramFIN, &flags);
 	return Protocol::sendDatagram(request->datagram, request->clientRequest, socketfd, &flags);

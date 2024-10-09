@@ -10,10 +10,10 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include "../header/BlockingQueue.h"
-#include "../header/ConfigParser.h"
-#include "../header/MessageSender.h"
-#include "../header/Protocol.h"
+#include "BlockingQueue.h"
+#include "ConfigParser.h"
+#include "MessageSender.h"
+#include "Protocol.h"
 
 #include <arpa/inet.h>
 #include <cstring>
@@ -69,8 +69,8 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	}
 	// End Broadcast
 
-	handler = new MessageReceiver(&messageQueue, &requestQueue);
-	sender = new MessageSender(socketInfo, broadcastInfo, addr);
+	handler = new MessageReceiver(&messageQueue, &datagramController);
+	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController);
 }
 
 ReliableCommunication::~ReliableCommunication() {

@@ -18,8 +18,8 @@ public:
 	static unsigned int computeChecksum(std::vector<unsigned char> *serializedDatagram);
 	static bool verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram);
 	static void signalHandler(int);
-	static bool readDatagramSocketTimeout(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr, int timeoutMS,
-										  std::vector<unsigned char> *buff);
+	// static bool readDatagramSocketTimeout(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr, int timeoutMS,
+	// 									  std::vector<unsigned char> *buff);
 	static bool readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr,
 								   std::vector<unsigned char> *buff);
 	static bool sendACK(Datagram *datagram, sockaddr_in *to, int socketfd);
@@ -30,8 +30,7 @@ public:
 	static unsigned int sumChecksum32(const std::vector<unsigned char> *data);
 
 private:
-	static thread_local std::atomic<std::thread::id> timeoutThreadId;
-	static thread_local std::atomic<bool> waitingTimeout;
+	// static thread_local std::atomic<bool> waitingTimeout;
 	static void bufferToDatagram(Datagram &datagramBuff, const std::vector<unsigned char> &bytesBuffer);
 };
 

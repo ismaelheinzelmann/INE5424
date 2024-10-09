@@ -1,5 +1,5 @@
 
-#include "../header/Datagram.h"
+#include "Datagram.h"
 
 Datagram::Datagram() {
 	this->sourceAddress = 0;
@@ -12,6 +12,24 @@ Datagram::Datagram() {
 	this->flags = 0;
 	this->checksum = 0;
 	this->data = std::vector<unsigned char>();
+}
+
+Datagram::Datagram(Datagram *datagram) {
+	setSourceAddress(datagram->getSourceAddress());
+	setSourcePort(datagram->getSourcePort());
+	setDestinAddress(datagram->getDestinAddress());
+	setDestinationPort(datagram->getDestinationPort());
+	setVersion(datagram->getVersion());
+	setDatagramTotal(datagram->getDatagramTotal());
+	setDataLength(datagram->getDataLength());
+	setFlags(datagram->getFlags());
+	setChecksum(datagram->getChecksum());
+
+	auto dataPtr = datagram->getData();
+	getData()->reserve(dataPtr->size());
+	for (size_t i = 0; i < dataPtr->size(); ++i) {
+		(*getData())[i] = dataPtr->at(i);
+	}
 }
 
 void Datagram::setSourceAddress(unsigned int address) { this->sourceAddress = address; }

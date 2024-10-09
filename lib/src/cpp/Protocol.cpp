@@ -1,9 +1,7 @@
 #include "../header/Protocol.h"
 
 #include <Logger.h>
-#include <csignal>
 
-#include <fcntl.h>
 #include <future>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -106,46 +104,11 @@ unsigned int Protocol::sumChecksum32(const std::vector<unsigned char> *data) {
 	// invert the bits to get the final CRC
 	return crc ^ 0xFFFFFFFF;
 }
-
+// TODO Fix checksum
 bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram) {
 	auto dch = datagram->getChecksum();
 	auto cch = computeChecksum(serializedDatagram);
 	return dch == cch;
-}
-
-thread_local std::atomic<std::thread::id> Protocol::timeoutThreadId = std::this_thread::get_id();
-thread_local std::atomic<bool> Protocol::waitingTimeout = false;
-
-void Protocol::signalHandler(int) {
-	std::thread::id currentThreadId = std::this_thread::get_id();
-	if (currentThreadId == timeoutThreadId.load() && waitingTimeout.load()) {
-		waitingTimeout.store(false);
-		throw std::exception();
-	}
-}
-
-bool Protocol::readDatagramSocketTimeout(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr, int timeoutMS,
-										 std::vector<unsigned char> *buff) {
-	std::signal(SIGALRM, signalHandler);
-
-	sigset_t newmask, oldmask;
-	sigemptyset(&newmask);
-	sigaddset(&newmask, SIGALRM);
-	pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
-	ualarm(timeoutMS * 1000, 0);
-	waitingTimeout.store(true);
-	try {
-		pthread_sigmask(SIG_UNBLOCK, &newmask, nullptr);
-		readDatagramSocket(datagramBuff, socketfd, senderAddr, buff);
-		ualarm(0, 0);
-		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
-		return true;
-	}
-	catch (const std::exception &) {
-		ualarm(0, 0);
-		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
-		return false;
-	}
 }
 
 bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr,

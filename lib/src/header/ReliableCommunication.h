@@ -1,15 +1,16 @@
 #pragma once
-#include "Datagram.h"
 #include <bits/std_mutex.h>
 #include <map>
 #include <netinet/in.h>
 #include <string>
 #include <thread>
 #include <vector>
-#include "MessageSender.h"
-#include "MessageReceiver.h"
-#include "Request.h"
 #include "BlockingQueue.h"
+#include "Datagram.h"
+#include "MessageReceiver.h"
+#include "MessageSender.h"
+
+#include "DatagramController.h"
 
 #ifndef RELIABLE_H
 #define RELIABLE_H
@@ -36,7 +37,7 @@ private:
 	MessageSender* sender;
 	std::map<unsigned short, sockaddr_in> configMap;
 	BlockingQueue<std::pair<bool,std::vector<unsigned char>>> messageQueue;
-	BlockingQueue<Request*> requestQueue;
+	DatagramController datagramController;
 
 	std::thread processingThread;
 	std::thread processingBroadcastThread;
