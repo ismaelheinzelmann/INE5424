@@ -56,10 +56,10 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 
 void Protocol::setChecksum(std::vector<unsigned char> *data) {
 	auto checksum = sumChecksum32(data);
-	(*data)[20] = static_cast<unsigned char>(checksum & 0xFF);
-	(*data)[21] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
-	(*data)[22] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
-	(*data)[23] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
+	(*data)[23] = static_cast<unsigned char>(checksum & 0xFF);
+	(*data)[22] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
+	(*data)[21] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
+	(*data)[20] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
 }
 
 // Deserializes data and returns a Datagram object.
