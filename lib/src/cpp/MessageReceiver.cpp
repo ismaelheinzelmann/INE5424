@@ -1,10 +1,8 @@
 #include "../header/MessageReceiver.h"
 
-#include <cassert>
 #include <iostream>
 #include "Logger.h"
 #include "Request.h"
-
 #include <map>
 #include <shared_mutex>
 #include "BlockingQueue.h"
@@ -93,6 +91,30 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 			{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}, request->datagram);
 		return;
 	}
+	if (request->datagram->isSYN()) {
+		handleFirstMessage(request, socketfd);
+	}
+}
+
+void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
+	if (!verifyMessage(request)) {
+		sendDatagramNACK(request, socketfd);
+		return;
+	}
+	Protocol::setBroadcast(request);
+
+	// Data datagram
+	if (request->datagram->getFlags() == 0) {
+		handleDataMessage(request, socketfd);
+		return;
+	}
+	if ((request->datagram->isSYN() && request->datagram->isACK()) ||
+		(request->datagram->isFIN() && request->datagram->isACK()) || request->datagram->isACK() ||
+		request->datagram->isNACK() || request->datagram->isFIN()) {
+		datagramController->insertDatagram(
+			{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}, request->datagram);
+		return;
+		}
 	if (request->datagram->isSYN()) {
 		handleFirstMessage(request, socketfd);
 	}
@@ -189,3 +211,4 @@ bool MessageReceiver::sendDatagramSYNACK(Request *request, int socketfd) {
 	Protocol::setFlags(&datagramFIN, &flags);
 	return Protocol::sendDatagram(request->datagram, request->clientRequest, socketfd, &flags);
 }
+

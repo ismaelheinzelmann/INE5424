@@ -1,6 +1,7 @@
 #include "../header/Protocol.h"
 
 #include <Logger.h>
+#include <Request.h>
 
 #include <future>
 #include <netinet/in.h>
@@ -163,4 +164,20 @@ void Protocol::setFlags(Datagram *datagram, Flags *flags) {
 		datagram->setIsEND();
 	if (flags->BROADCAST)
 		datagram->setIsBROADCAST();
+}
+
+void Protocol::setBroadcast(Request *request) {
+	auto broadcastAddr = broadcastAddress();
+	request->clientRequest->sin_addr.s_addr = broadcastAddr.sin_addr.s_addr;
+	request->clientRequest->sin_port = broadcastAddr.sin_port;
+	request->clientRequest->sin_family = broadcastAddr.sin_family;
+}
+
+
+sockaddr_in Protocol::broadcastAddress() {
+	sockaddr_in broadcastAddr{};
+	broadcastAddr.sin_family = AF_INET;
+	broadcastAddr.sin_port = htons(8888); // Should be sent to all ports
+	broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
+	return broadcastAddr;
 }

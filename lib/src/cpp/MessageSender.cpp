@@ -58,6 +58,33 @@ void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *data
 	}
 }
 
+void MessageSender::buildBroadcastDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
+								   std::map<unsigned short, bool> *acknowledgments,
+								   std::map<unsigned short, bool> *responses, in_port_t transientPort,
+								   unsigned short totalDatagrams, std::vector<unsigned char> &message) {
+	//TODO pra cada {ip, porta} cria isso aqui
+	for (int i = 0; i < totalDatagrams; ++i) {
+		auto versionDatagram = Datagram();
+		versionDatagram.setSourceAddress(configAddr.sin_addr.s_addr);
+		versionDatagram.setSourcePort(configAddr.sin_port);
+		versionDatagram.setDestinationPort(transientPort);
+		versionDatagram.setVersion(i + 1);
+		versionDatagram.setDatagramTotal(totalDatagrams);
+		for (unsigned short j = 0; j < 1024; j++) {
+			const unsigned int index = i * 1024 + j;
+			if (index >= message.size())
+				break;
+			versionDatagram.getData()->push_back(message.at(index));
+		}
+		versionDatagram.setDataLength(versionDatagram.getData()->size());
+		auto serializedDatagram = Protocol::serialize(&versionDatagram);
+		Protocol::setChecksum(&serializedDatagram);
+		(*datagrams)[i] = serializedDatagram;
+		(*acknowledgments)[i] = false;
+		(*responses)[i] = false;
+	}
+}
+
 bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message) {
 	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
 	auto datagram = Datagram();
@@ -184,7 +211,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
 
-	sockaddr_in destin = broadcastAddress();
+	sockaddr_in destin = Protocol::broadcastAddress();
 
 	bool accepted = ackAttempts(destin, &datagram, true);
 	if (!accepted) {
@@ -193,8 +220,10 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 	// build of datagrams
 	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
-	std::map<unsigned short, bool> acknowledgments, responses;
-	buildDatagrams(&datagrams, &acknowledgments, &responses, 1, totalDatagrams, message);
+	std::map<std::pair<unsigned int, unsigned short>,std::map<unsigned short, bool>> membersAcks;
+	//TODO Configurar datagramas
+	
+	// buildDatagrams(&datagrams, &acknowledgments, &responses, 1, totalDatagrams, message);
 
 	auto buff = std::vector<unsigned char>(1048);
 
@@ -207,15 +236,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	// bool responded = Protocol::readDatagramSocketTimeout(&datagram, broadcastFD, &destin, 0, &buff);
 	return false;
 }
-
-sockaddr_in MessageSender::broadcastAddress() {
-	sockaddr_in broadcastAddr{};
-	broadcastAddr.sin_family = AF_INET;
-	broadcastAddr.sin_port = htons(8888); // Should be sent to all ports
-	broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
-	return broadcastAddr;
-}
-
 std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort() {
 	sockaddr_in addr{};
 	socklen_t addr_len = sizeof(addr);

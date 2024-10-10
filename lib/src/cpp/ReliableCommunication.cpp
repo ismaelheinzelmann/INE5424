@@ -168,7 +168,7 @@ void ReliableCommunication::processBroadcastDatagram() {
 		}
 		senderAddr.sin_family = AF_INET;
 		auto request = Request{&buffer, &senderAddr, &datagram};
-		handler->handleMessage(&request, this->broadcastInfo);
+		handler->handleBroadcastMessage(&request, this->broadcastInfo);
 	}
 }
 
