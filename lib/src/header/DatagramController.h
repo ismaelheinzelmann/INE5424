@@ -15,6 +15,7 @@ public:
 	Datagram *getDatagramTimeout(const std::pair<unsigned int, unsigned short> &identifier, int timeoutMS);
 	void insertDatagram(const std::pair<unsigned int, unsigned short> &identifier, Datagram *datagram);
 	void flush();
+	void deleteQueue(std::pair<unsigned int, unsigned short> identifier);
 
 private:
 	static thread_local std::atomic<bool> waitingTimeout;

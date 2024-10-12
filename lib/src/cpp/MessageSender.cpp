@@ -265,6 +265,8 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 						   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
+				if (verifyBatchResponded(&membersAcks, batchSize, batchStart, totalDatagrams))
+					break;
 				Datagram *response =
 					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
 														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
@@ -289,7 +291,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 				if (response->isACK() && response->isFIN()) {
 					if (members.contains(identifier))
 						members[identifier] = true;
-					continue;
 				}
 
 				// Informa que a versão foi negada.
@@ -297,6 +298,8 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					if (membersAcks.contains(identifier))
 						membersAcks[identifier][response->getVersion() - 1].second = true;
 				}
+				if (verifyBatchResponded(&membersAcks, batchSize, batchStart, totalDatagrams))
+					break;
 			}
 			// Batch acordado, procede para o proximo batch
 			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams)) {
@@ -321,8 +324,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 		// No final de uma tentativa, verifica se o batch foi acordado. Caso não, encerra o fluxo de envio.
 		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
-		if (!verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) ||
-			verifyMessageAcked(&members)) {
+		if (!verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) || verifyMessageAcked(&members)) {
 			break;
 		}
 	}
@@ -475,6 +477,9 @@ void MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 			continue;
 		}
 		while (true) {
+			if (members->size() == configMap->size()) {
+				break;
+			}
 			Datagram *response =
 				datagramController->getDatagramTimeout({datagram->getSourceAddress(), datagram->getDestinationPort()},
 													   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
@@ -490,6 +495,7 @@ void MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 					}
 				}
 			}
+
 		}
 	}
 }

@@ -43,31 +43,25 @@ MessageReceiver::~MessageReceiver() {
 }
 
 
-
 void MessageReceiver::cleanse() {
-	Logger::log("Cleanse thread initialized.", LogLevel::DEBUG);
 	while (true) {
 		{
 			std::unique_lock lock(mtx);
-			Logger::log("Cleanse thread sleeping", LogLevel::DEBUG);
 			if (cv.wait_for(lock, std::chrono::seconds(10), [this] { return !running; })) {
-				Logger::log("Cleanse thread ended.", LogLevel::DEBUG);
 				return;
 			}
 		}
-		Logger::log("Cleanse thread running", LogLevel::DEBUG);
 		{
 			std::lock_guard messagesLock(messagesMutex);
-			for (auto it = this->messages.begin(); it != this->messages.end();) {
-				auto &[pair, message] = *it;
+			auto remove = std::vector<std::pair<unsigned int, unsigned short>>();
+			for (auto [identifier, message]: messages) {
 				if (std::chrono::system_clock::now() - message->getLastUpdate() > std::chrono::seconds(10)) {
-					std::lock_guard messageLock(*message->getMutex());
-					delete message;
-					it = messages.erase(it);
+					remove.emplace_back(identifier);
 				}
-				else {
-					++it;
-				}
+			}
+			for (auto identifier: remove) {
+				this->messages.erase(identifier);
+				datagramController->deleteQueue(identifier);
 			}
 		}
 	}
@@ -131,10 +125,15 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 
 			if (!message->acks.contains(identifier) && datagram->isSYN()) {
 				message->acks[identifier] = false;
-			} else if (!message->acks.contains(identifier) && datagram->isFIN()) {
+			}
+			else if (!message->acks.contains(identifier) && datagram->isFIN()) {
 				return;
-			} else {
+			}
+			else {
 				message->acks[identifier] = datagram->isFIN();
+				if (!message->delivered) {
+					deliverBroadcast(message);
+				}
 			}
 		}
 		datagramController->insertDatagram({datagram->getSourceAddress(), datagram->getDestinationPort()}, datagram);
@@ -149,7 +148,6 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 	if (messages.contains({request->datagram->getSourceAddress(), request->datagram->getDestinationPort()})) {
 		sendDatagramSYNACK(request, socketfd);
 	}
-	std::cout<<socketfd<<std::endl;
 	auto *message = new Message(request->datagram->getDatagramTotal());
 	if (broadcast) {
 		message->broadcastMessage = true;
@@ -158,6 +156,18 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 	sendDatagramSYNACK(request, socketfd);
 }
 
+void MessageReceiver::deliverBroadcast(Message *message) {
+	if (true) { // IF URB
+		if (message->allACK()) {
+			message->delivered = true;
+			messageQueue->push(std::make_pair(true, *message->getData()));
+		}
+	}
+	else {
+		message->delivered = true;
+		messageQueue->push(std::make_pair(true, *message->getData()));
+	}
+}
 void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	Message *message = getMessage(request->datagram);
@@ -165,10 +175,10 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
 		sendDatagramFIN(request, socketfd);
 		return;
 	}
-	std::lock_guard messageLock(*message->getMutex());
+	std::shared_lock messageLock(*message->getMutex());
 
 	if (message->delivered) {
-	sendDatagramFINACK(request, socketfd);
+		sendDatagramFINACK(request, socketfd);
 		return;
 	}
 	if (!message->verifyMessage(*request->datagram)) {
@@ -177,18 +187,13 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
 	}
 	bool sent = message->addData(request->datagram);
 	if (sent) {
+		auto addr = (*configs)[id];
+		if (message->acks.contains({addr.sin_addr.s_addr, addr.sin_port})) {
+			message->acks[{addr.sin_addr.s_addr, addr.sin_port}] = true;
+		}
 		sendDatagramFINACK(request, socketfd);
 		if (!message->delivered) {
-			if (true) { // IF URB
-				if (message->allACK()) {
-					message->delivered = true;
-					messageQueue->push(std::make_pair(true, *message->getData()));
-				}
-			}
-			else {
-				message->delivered = true;
-				messageQueue->push(std::make_pair(true, *message->getData()));
-			}
+			deliverBroadcast(message);
 		}
 	}
 	sendDatagramACK(request, socketfd);

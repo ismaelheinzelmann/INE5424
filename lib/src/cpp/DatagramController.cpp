@@ -41,7 +41,7 @@ Datagram *DatagramController::getDatagramTimeout(const std::pair<unsigned int, u
 	std::signal(SIGALRM, signalHandler);
 	waitingTimeout.store(true);
 	pthread_sigmask(SIG_UNBLOCK, &newmask, nullptr);
-	ualarm(std::min(timeoutMS * 1000, 100000), 0);
+	ualarm(std::min(timeoutMS * 1000, 1000000), 0);
 	Datagram *datagram = datagrams.at(identifier)->pop();
 	pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
 	waitingTimeout.store(false);
@@ -51,6 +51,12 @@ Datagram *DatagramController::getDatagramTimeout(const std::pair<unsigned int, u
 
 thread_local std::atomic<bool> DatagramController::waitingTimeout = false;
 
+void DatagramController::deleteQueue(std::pair<unsigned int, unsigned short> identifier) {
+	std::unique_lock lock(datagramsMutex);
+	if (datagrams.contains(identifier)) {
+		datagrams.erase(identifier);
+	}
+}
 
 void DatagramController::insertDatagram(const std::pair<unsigned int, unsigned short> &identifier, Datagram *datagram) {
 	std::unique_lock lock(datagramsMutex);

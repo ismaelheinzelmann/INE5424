@@ -41,6 +41,7 @@ private:
 	std::map<unsigned short, sockaddr_in> *configs;
 
 	void handleFirstMessage(Request *request, int socketfd, bool broadcast = false);
+	void deliverBroadcast(Message *message);
 	void handleDataMessage(Request *request, int socketfd);
 	static bool verifyMessage(Request *request);
 	bool sendDatagramSYNACK(Request *request, int socketfd);
