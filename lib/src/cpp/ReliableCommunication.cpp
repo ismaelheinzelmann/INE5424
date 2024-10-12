@@ -154,7 +154,7 @@ void ReliableCommunication::processBroadcastDatagram() {
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
 		Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer);
-		Logger::log("Broadcast Received.", LogLevel::DEBUG);
+		// Logger::log("Broadcast Received.", LogLevel::DEBUG);
 		buffer.resize(24 + datagram.getDataLength());
 		if (!verifyOriginBroadcast(datagram.getSourcePort()))
 		{

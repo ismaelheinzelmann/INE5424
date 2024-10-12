@@ -19,7 +19,7 @@
 #define RETRY_ACK_ATTEMPT 3
 #define RETRY_ACK_TIMEOUT_USEC 200
 
-#define RETRY_DATA_ATTEMPT 7
+#define RETRY_DATA_ATTEMPT 6
 #define RETRY_DATA_TIMEOUT_USEC 100
 #define RETRY_DATA_TIMEOUT_USEC_MAX 800
 #define TIMEOUT_INCREMENT 200
@@ -63,7 +63,8 @@ void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *data
 void MessageSender::buildBroadcastDatagrams(
 	std::vector<std::vector<unsigned char>> *datagrams,
 	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
-	in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char> &message) {
+	in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char> &message,
+	std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
 	std::map<unsigned short, bool> acknowledgments, responses;
 
 	for (int i = 0; i < totalDatagrams; ++i) {
@@ -85,9 +86,8 @@ void MessageSender::buildBroadcastDatagrams(
 		(*datagrams)[i] = serializedDatagram;
 		acknowledgments[i] = false;
 		responses[i] = false;
-		for (const auto &configPair : *configMap) {
-			const auto &config = configPair.second;
-			(*membersAcks)[{config.sin_addr.s_addr, config.sin_port}][i] = {false, false};
+		for (const auto &member : *members) {
+			(*membersAcks)[{member.first.first, member.first.second}][i] = {false, false};
 		}
 	}
 }
@@ -139,12 +139,12 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
 														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
 				if (response == nullptr)
-				// Resposta de outro batch, pode ser descartada.
-				if (response->getVersion() - 1 < batchStart * batchSize ||
-					response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
-					Logger::log("Received old response.", LogLevel::DEBUG);
-					continue;
-				}
+					// Resposta de outro batch, pode ser descartada.
+					if (response->getVersion() - 1 < batchStart * batchSize ||
+						response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
+						Logger::log("Received old response.", LogLevel::DEBUG);
+						continue;
+					}
 				// Armazena informação de ACK recebido.
 				if (response->getVersion() - 1 <= totalDatagrams && response->isACK() &&
 					!acknowledgments[response->getVersion() - 1]) {
@@ -217,16 +217,21 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
 
 	sockaddr_in destin = Protocol::broadcastAddress();
-
-	bool accepted = ackAttempts(destin, &datagram, true);
-	if (!accepted) {
+	// TODO Broadcast ack envia até o grupo inicial responder ou todas as tentativas.
+	// TODO Hashmap de membros SYNACK
+	auto members = std::map<std::pair<unsigned int, unsigned short>, bool>();
+	// unsigned short initialMembersSize = members.size();
+	broadcastAckAttempts(destin, &datagram, &members);
+	if (members.empty()) {
+		close(transientSocketFd.first);
 		return false;
 	}
 
 	// build of datagrams
 	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
 	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> membersAcks;
-	buildBroadcastDatagrams(&datagrams, &membersAcks, transientSocketFd.second.sin_port, totalDatagrams, message);
+	buildBroadcastDatagrams(&datagrams, &membersAcks, transientSocketFd.second.sin_port, totalDatagrams, message,
+							&members);
 
 	unsigned short batchSize = BATCH_SIZE;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
@@ -234,7 +239,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
 		unsigned short batchIndex;
-		if (verifyMessageAcked(&membersAcks) == totalDatagrams) {
+		if (verifyMessageAcked(&members) == totalDatagrams) {
 			close(transientSocketFd.first);
 			return true;
 		}
@@ -256,7 +261,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					}
 				}
 				if (!datagramAcked)
-					sendto(socketFD, datagrams[batchIndex].data(), datagrams[batchIndex].size(), 0,
+					sendto(broadcastFD, datagrams[batchIndex].data(), datagrams[batchIndex].size(), 0,
 						   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
@@ -265,6 +270,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
 				if (response == nullptr)
 					break;
+				auto identifier = std::make_pair(response->getSourceAddress(), response->getSourcePort());
 				// Resposta de outro batch, pode ser descartada.
 				if (response->getVersion() - 1 < batchStart * batchSize ||
 					response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
@@ -273,90 +279,72 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 				}
 				// Armazena informação de ACK recebido.
 				if (response->getVersion() - 1 <= totalDatagrams && response->isACK() &&
-					membersAcks.contains({response->getSourceAddress(), response->getSourcePort()}) &&
-					!membersAcks[std::make_pair(response->getSourceAddress(), response->getSourcePort())]
-								[response->getVersion() - 1]
-									.first) {
+					membersAcks.contains(identifier) && !membersAcks[identifier][response->getVersion() - 1].first) {
 					Logger::log("Datagram of version " + std::to_string(response->getVersion()) + " accepted.",
 								LogLevel::DEBUG);
-					membersAcks[std::make_pair(response->getSourceAddress(), response->getSourcePort())]
-							   [response->getVersion() - 1]
-								   .first = true;
-					membersAcks[std::make_pair(response->getSourceAddress(), response->getSourcePort())]
-							   [response->getVersion() - 1]
-								   .second = true;
+					membersAcks[identifier][response->getVersion() - 1] = {true, true};
 				}
 
 				// Conexão finalizada, com ou sem sucesso.
 				if (response->isACK() && response->isFIN()) {
-					Logger::log("Peer ended connection with success at receiving message.", LogLevel::DEBUG);
-					close(transientSocketFd.first);
-					return true;
-				}
-				if (response->isFIN()) {
-					Logger::log("Peer ended connection.", LogLevel::DEBUG);
-					close(transientSocketFd.first);
-					return false;
+					if (members.contains(identifier))
+						members[identifier] = true;
+					continue;
 				}
 
 				// Informa que a versão foi negada.
 				if (response->isNACK()) {
-					if (membersAcks.contains({response->getSourceAddress(), response->getSourcePort()}))
-						membersAcks[std::make_pair(response->getSourceAddress(), response->getSourcePort())]
-								   [response->getVersion() - 1]
-									   .second = true;
+					if (membersAcks.contains(identifier))
+						membersAcks[identifier][response->getVersion() - 1].second = true;
 				}
-
-				// Batch acordado, procede para o proximo batch
-				if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams))
-					break;
-
-
-				// Verifica se o batch foi ao menos respondido, caso tenha sido, mesmo que com algum NACK, procede para
-				// retransmissão (se for o caso).
-				auto responsesCounter = 0;
-				for (auto &&p : membersAcks)
-					for (auto &&p2 : p.second)
-						if (p2.second.second)
-							++responsesCounter;
-				if (responsesCounter == batchSize) {
-					Logger::log("Batch " + std::to_string(batchStart + 1) + " responded, but not aknowledged.",
-								LogLevel::DEBUG);
-					break;
-				}
+			}
+			// Batch acordado, procede para o proximo batch
+			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams)) {
+				break;
+			}
+			// Verifica se o batch foi ao menos respondido, caso tenha sido, mesmo que com algum NACK, procede para
+			// retransmissão (se for o caso).
+			if (verifyBatchResponded(&membersAcks, batchSize, batchStart, totalDatagrams)) {
+				Logger::log("Batch " + std::to_string(batchStart + 1) + " responded, but not aknowledged.",
+							LogLevel::DEBUG);
+				break;
 			}
 		}
 		// Remove membros que falharam em acordar batch mesmo depois de todas as tentativas
-		removeFailed(&membersAcks);
+		// removeFailed(&membersAcks, &members);
 
 		// Se menos das metades dos membros ainda estiverem vivos, declara falha
-		if (membersAcks.size() < configMap->size() / 2) {
-			close(transientSocketFd.first);
-			return false;
-		}
+		// if (members.size() < initialMembersSize / 2) {
+		// 	close(transientSocketFd.first);
+		// 	return false;
+		// }
 
 		// No final de uma tentativa, verifica se o batch foi acordado. Caso não, encerra o fluxo de envio.
 		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
 		if (!verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) ||
-			verifyMessageAcked(&membersAcks)) {
+			verifyMessageAcked(&members)) {
 			break;
 		}
 	}
 	close(transientSocketFd.first);
-	return verifyMessageAcked(&membersAcks);
+	return verifyMessageAcked(&members);
 }
 
 void MessageSender::removeFailed(
-	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks) {
+	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
+	std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
 	auto remove = std::vector<std::pair<unsigned int, unsigned short>>();
 	for (auto &[addr, map] : *membersAcks) {
 		for (auto &&[ack, response] : map) {
-			if (response.first)
+			if (!response.first)
 				remove.emplace_back(addr.first, addr.second);
 		}
 	}
-	for (auto member: remove) {
-		membersAcks->erase({member.first, member.second});
+	for (auto member : remove) {
+		if (membersAcks->contains({member.first, member.second}))
+			membersAcks->erase({member.first, member.second});
+		if (members->contains({member.first, member.second}))
+			members->erase({member.first, member.second});
 	}
 }
 std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort() {
@@ -389,13 +377,10 @@ std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort() {
 	return {sockfd, addr};
 }
 
-bool MessageSender::verifyMessageAcked(
-	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks) {
+bool MessageSender::verifyMessageAcked(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks) {
 	for (auto &&member : *membersAcks) {
-		for (auto &&[ack, response] : member.second) {
-			if (response.first)
-				return false;
-		}
+		if (!member.second)
+			return false;
 	}
 	return true;
 }
@@ -411,7 +396,7 @@ bool MessageSender::verifyBatchAcked(
 		}
 		for (auto &&member : *membersAcks) {
 			for (auto &&[ack, response] : member.second) {
-				if (response.first)
+				if (!response.first)
 					return false;
 			}
 		}
@@ -419,19 +404,39 @@ bool MessageSender::verifyBatchAcked(
 	return true;
 }
 
+bool MessageSender::verifyBatchResponded(
+	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
+	unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams) {
+
+	unsigned short batchStart = batchSize * batchIndex, batchEnd = (batchSize * batchIndex) + batchSize;
+	for (int i = batchStart; i < batchEnd; ++i) {
+		if (i >= totalDatagrams) {
+			break;
+		}
+		for (auto &&member : *membersAcks) {
+			for (auto &&[ack, response] : member.second) {
+				if (!response.second)
+					return false;
+			}
+		}
+	}
+	return true;
+}
+
+
 unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength) {
 	const double result = static_cast<double>(dataLength) / 1024;
 	return static_cast<int>(ceil(result));
 }
 
-bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram, bool isBroadcast) {
+bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram) {
 	Flags flags;
 	flags.SYN = true;
 	Protocol::setFlags(datagram, &flags);
 	auto buff = std::vector<unsigned char>(1048);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
-		bool sent = Protocol::sendDatagram(datagram, &destin, isBroadcast ? broadcastFD : socketFD, &flags);
+		bool sent = Protocol::sendDatagram(datagram, &destin, socketFD, &flags);
 		if (!sent) {
 			Logger::log("Failed sending ACK datagram.", LogLevel::WARNING);
 			continue;
@@ -451,4 +456,40 @@ bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram, bool is
 	Logger::log("ACK failed.", LogLevel::WARNING);
 
 	return false;
+}
+
+void MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
+										 std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
+	Flags flags;
+	flags.SYN = true;
+	Protocol::setFlags(datagram, &flags);
+	auto buff = std::vector<unsigned char>(1048);
+
+	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
+		if (members->size() == configMap->size()) {
+			break;
+		}
+		bool sent = Protocol::sendDatagram(datagram, &destin, broadcastFD, &flags);
+		if (!sent) {
+			Logger::log("Failed sending ACK datagram.", LogLevel::WARNING);
+			continue;
+		}
+		while (true) {
+			Datagram *response =
+				datagramController->getDatagramTimeout({datagram->getSourceAddress(), datagram->getDestinationPort()},
+													   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
+			if (response == nullptr) {
+				break;
+			}
+			if (response->isACK() && response->isSYN() && datagram->getVersion() == response->getVersion()) {
+				for (auto [_, addr] : *configMap) {
+					if (addr.sin_addr.s_addr == datagram->getSourceAddress() &&
+						addr.sin_port == datagram->getSourcePort()) {
+						(*members)[{response->getSourceAddress(), response->getSourcePort()}] = false;
+						break;
+					}
+				}
+			}
+		}
+	}
 }
