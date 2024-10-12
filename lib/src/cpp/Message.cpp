@@ -1,9 +1,7 @@
 #include "../header/Message.h"
 #include <chrono>
 #include "../header/Datagram.h"
-
-#include <iostream>
-
+#include <ranges>
 Message::Message(unsigned short totalDatagrams) {
 	lastUpdate = std::chrono::system_clock::now();
 	this->totalDatagrams = totalDatagrams;
@@ -15,12 +13,20 @@ Message::Message(unsigned short totalDatagrams) {
 
 Message::~Message() { delete data; }
 
-std::mutex *Message::getMutex() { return &messageMutex; }
+bool Message::allACK() {
+	for (const auto ack : acks | std::views::values)
+		if (!ack)
+			return false;
+	return true;
+}
+
+
+std::shared_mutex *Message::getMutex() { return &messageMutex; }
 
 // Adds data to the message. Returns true if ended the receive.
 bool Message::addData(Datagram *datagram) {
-	// if (datagram->getVersion() <= lastVersionReceived)
-	// 	return false;
+		// if (datagram->getVersion() <= lastVersionReceived)
+		// 	return false;
 	if (sent || delivered)
 		return true;
 	if (versions[datagram->getVersion()])
