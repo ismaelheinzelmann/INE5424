@@ -42,8 +42,9 @@ private:
 
 	void handleFirstMessage(Request *request, int socketfd, bool broadcast = false);
 	void deliverBroadcast(Message *message);
-	void handleDataMessage(Request *request, int socketfd);
+	void handleBroadcastDataMessage(Request *request, int socketfd);
 	static bool verifyMessage(Request *request);
+	void handleDataMessage(Request *request, int socketfd);
 	bool sendDatagramSYNACK(Request *request, int socketfd);
 	Message *getMessage(Datagram *datagram);
 	bool sendDatagramACK(Request *request, int socketfd);

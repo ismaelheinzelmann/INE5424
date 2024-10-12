@@ -54,12 +54,12 @@ void MessageReceiver::cleanse() {
 		{
 			std::lock_guard messagesLock(messagesMutex);
 			auto remove = std::vector<std::pair<unsigned int, unsigned short>>();
-			for (auto [identifier, message]: messages) {
+			for (auto [identifier, message] : messages) {
 				if (std::chrono::system_clock::now() - message->getLastUpdate() > std::chrono::seconds(10)) {
 					remove.emplace_back(identifier);
 				}
 			}
-			for (auto identifier: remove) {
+			for (auto identifier : remove) {
 				this->messages.erase(identifier);
 				datagramController->deleteQueue(identifier);
 			}
@@ -72,15 +72,40 @@ bool MessageReceiver::verifyMessage(Request *request) {
 	return Protocol::verifyChecksum(request->datagram, request->data);
 }
 
+void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
+	std::shared_lock lock(messagesMutex);
+	Message *message = getMessage(request->datagram);
+	if (message == nullptr) {
+		sendDatagramFIN(request, socketfd);
+		return;
+	}
+	std::lock_guard messageLock(*message->getMutex());
+
+	if (message->delivered) {
+		sendDatagramFINACK(request, socketfd);
+		return;
+	}
+	if (!message->verifyMessage(*(request->datagram))) {
+		sendDatagramNACK(request, socketfd);
+		return;
+	}
+	bool sent = message->addData(request->datagram);
+	if (sent) {
+		sendDatagramFINACK(request, socketfd);
+		if (!message->delivered) {
+			message->delivered = true;
+			messageQueue->push(std::make_pair(true, *message->getData()));
+		}
+	}
+	sendDatagramACK(request, socketfd);
+}
+
 void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	if (!verifyMessage(request)) {
 		sendDatagramNACK(request, socketfd);
 		return;
 	}
-	Message *message = getMessage(request->datagram);
-	if (message == nullptr)
-		return;
 
 	// Data datagram
 	if (request->datagram->getFlags() == 0) {
@@ -90,7 +115,10 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	if ((request->datagram->isSYN() && request->datagram->isACK()) ||
 		(request->datagram->isFIN() && request->datagram->isACK()) || request->datagram->isACK() ||
 		request->datagram->isNACK() || request->datagram->isFIN()) {
-
+		std::shared_lock lock(messagesMutex);
+		Message *message = getMessage(request->datagram);
+		if (message == nullptr)
+			return;
 		datagramController->insertDatagram(
 			{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}, request->datagram);
 		return;
@@ -110,7 +138,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	Datagram *datagram = request->datagram;
 	// Data datagram
 	if (datagram->getFlags() == 0) {
-		handleDataMessage(request, socketfd);
+		handleBroadcastDataMessage(request, socketfd);
 		return;
 	}
 	if ((datagram->isSYN() && datagram->isACK()) || (datagram->isFIN() && datagram->isACK()) || datagram->isACK() ||
@@ -168,7 +196,7 @@ void MessageReceiver::deliverBroadcast(Message *message) {
 		messageQueue->push(std::make_pair(true, *message->getData()));
 	}
 }
-void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
+void MessageReceiver::handleBroadcastDataMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	Message *message = getMessage(request->datagram);
 	if (message == nullptr) {
