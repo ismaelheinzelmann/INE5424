@@ -19,8 +19,9 @@
 // Thread that verifies every N seconds and remove requisitions that timedout;
 class MessageReceiver {
 public:
-	explicit MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
-							 DatagramController *datagramController);
+	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
+					DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
+					unsigned short id);
 	~MessageReceiver();
 	void stop();
 	void handleMessage(Request *request, int socketfd);
@@ -32,21 +33,22 @@ private:
 	BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue;
 	std::thread cleanseThread;
 	DatagramController *datagramController;
-
+	unsigned short id;
 	// Cleanse
 	std::condition_variable cv;
 	std::mutex mtx;
 	std::atomic<bool> running{true};
+	std::map<unsigned short, sockaddr_in> *configs;
 
-	void handleFirstMessage(Request *request, int socketfd);
+	void handleFirstMessage(Request *request, int socketfd, bool broadcast = false);
 	void handleDataMessage(Request *request, int socketfd);
 	static bool verifyMessage(Request *request);
-	static bool sendDatagramSYNACK(Request *request, int socketfd);
+	bool sendDatagramSYNACK(Request *request, int socketfd);
 	Message *getMessage(Datagram *datagram);
-	static bool sendDatagramACK(Request *request, int socketfd);
-	static bool sendDatagramNACK(Request *request, int socketfd);
-	static bool sendDatagramFINACK(Request *request, int socketfd);
-	static bool sendDatagramFIN(Request *request, int socketfd);
+	bool sendDatagramACK(Request *request, int socketfd);
+	bool sendDatagramNACK(Request *request, int socketfd);
+	bool sendDatagramFINACK(Request *request, int socketfd);
+	bool sendDatagramFIN(Request *request, int socketfd);
 	void cleanse();
 };
 

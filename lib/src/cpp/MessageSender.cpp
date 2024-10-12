@@ -116,7 +116,6 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
 	std::vector<unsigned char> buff = std::vector<unsigned char>(1048);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
-
 		unsigned short batchIndex, batchAck = 0;
 		if (sent == totalDatagrams) {
 			close(transientSocketFd.first);
@@ -140,7 +139,6 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
 														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
 				if (response == nullptr)
-					break;
 				// Resposta de outro batch, pode ser descartada.
 				if (response->getVersion() - 1 < batchStart * batchSize ||
 					response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
@@ -376,7 +374,7 @@ std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort() {
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_port = htons(0);
 
-	if (bind(sockfd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0) {
+	if (bind(sockfd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0) {
 		Logger::log("Failed binding socket.", LogLevel::ERROR);
 		close(sockfd);
 		throw std::runtime_error("Failed to bind socket");
