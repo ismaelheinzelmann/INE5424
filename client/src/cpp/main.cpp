@@ -51,8 +51,10 @@ int main(int argc, char *argv[])
 		if (type == "1")
 		{
 			std::string idString = std::string();
+			rb.printNodes(&g_lock);
 			std::cout << "Choose which node you want to send the message:" << std::endl;
 			std::cin >> idString;
+			std::cin.ignore();
 			std::string message = std::string();
 			std::cout << "Write the message:" << std::endl;
 			std::cin.ignore();
@@ -71,6 +73,7 @@ int main(int argc, char *argv[])
 			std::cout << "Broadcast type: " << bcType << std::endl;
 			std::string message = std::string();
 			std::cout << "Write the message:" << std::endl;
+			std::cin.ignore();
 			std::getline(std::cin, message);
 			std::vector<unsigned char> messageBytes(message.begin(), message.end());
 			auto before = std::chrono::system_clock::now();

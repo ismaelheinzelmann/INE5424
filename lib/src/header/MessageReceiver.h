@@ -16,7 +16,6 @@
 
 #include "DatagramController.h"
 
-#include <ReliableCommunication.h>
 
 // Thread that verifies every N seconds and remove requisitions that timedout;
 class MessageReceiver {
