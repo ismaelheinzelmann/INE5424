@@ -1,9 +1,8 @@
 #include "../header/Protocol.h"
 
 #include <Logger.h>
-#include <csignal>
+#include <Request.h>
 
-#include <fcntl.h>
 #include <future>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -14,7 +13,9 @@
 #include "../header/Flags.h"
 // Serializes data and computes the checksum while doing so.
 std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
+	// TODO Refatorar
 	std::vector<unsigned char> serializedDatagram;
+
 	unsigned int tempInt = datagram->getSourceAddress();
 	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 24) & 0xFF));
 	serializedDatagram.push_back(static_cast<unsigned char>((tempInt >> 16) & 0xFF));
@@ -34,6 +35,7 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	temp = datagram->getDestinationPort();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
+
 	temp = datagram->getVersion();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
@@ -41,9 +43,11 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	temp = datagram->getDatagramTotal();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
+
 	temp = datagram->getDataLength();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
+
 	temp = datagram->getFlags();
 	serializedDatagram.push_back(static_cast<unsigned char>(temp >> 8));
 	serializedDatagram.push_back(static_cast<unsigned char>(temp & 0xFF));
@@ -57,10 +61,10 @@ std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 
 void Protocol::setChecksum(std::vector<unsigned char> *data) {
 	auto checksum = sumChecksum32(data);
-	(*data)[20] = static_cast<unsigned char>(checksum & 0xFF);
-	(*data)[21] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
-	(*data)[22] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
-	(*data)[23] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
+	(*data)[23] = static_cast<unsigned char>(checksum & 0xFF);
+	(*data)[22] = static_cast<unsigned char>((checksum >> 8) & 0xFF);
+	(*data)[21] = static_cast<unsigned char>((checksum >> 16) & 0xFF);
+	(*data)[20] = static_cast<unsigned char>((checksum >> 24) & 0xFF);
 }
 
 // Deserializes data and returns a Datagram object.
@@ -105,53 +109,18 @@ unsigned int Protocol::sumChecksum32(const std::vector<unsigned char> *data) {
 	// invert the bits to get the final CRC
 	return crc ^ 0xFFFFFFFF;
 }
-
+// TODO Fix checksum
 bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram) {
 	auto dch = datagram->getChecksum();
 	auto cch = computeChecksum(serializedDatagram);
 	return dch == cch;
 }
 
-thread_local std::atomic<std::thread::id> Protocol::timeoutThreadId = std::this_thread::get_id();
-thread_local std::atomic<bool> Protocol::waitingTimeout = false;
-
-void Protocol::signalHandler(int) {
-	std::thread::id currentThreadId = std::this_thread::get_id();
-	if (currentThreadId == timeoutThreadId.load() && waitingTimeout.load()) {
-		waitingTimeout.store(false);
-		throw std::exception();
-	}
-}
-
-bool Protocol::readDatagramSocketTimeout(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr, int timeoutMS,
-										 std::vector<unsigned char> *buff) {
-	std::signal(SIGALRM, signalHandler);
-
-	sigset_t newmask, oldmask;
-	sigemptyset(&newmask);
-	sigaddset(&newmask, SIGALRM);
-	pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
-	ualarm(timeoutMS * 1000, 0);
-	waitingTimeout.store(true);
-	try {
-		pthread_sigmask(SIG_UNBLOCK, &newmask, nullptr);
-		readDatagramSocket(datagramBuff, socketfd, senderAddr, buff);
-		ualarm(0, 0);
-		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
-		return true;
-	}
-	catch (const std::exception &) {
-		ualarm(0, 0);
-		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
-		return false;
-	}
-}
-
 bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr,
-								   std::vector<unsigned char> *buff) {
-	socklen_t senderAddrLen = sizeof(sockaddr_in);
+								  std::vector<unsigned char> *buff) {
+	socklen_t senderAddrLen = sizeof(senderAddr);
 	ssize_t bytes_received = recvfrom(socketfd, buff->data(), buff->size(), 0,
-	                                  reinterpret_cast<struct sockaddr *>(senderAddr), &senderAddrLen);
+									  reinterpret_cast<struct sockaddr *>(senderAddr), &senderAddrLen);
 	if (bytes_received < 0)
 		return false;
 	bufferToDatagram(*datagramBuff, *buff);
@@ -162,7 +131,7 @@ bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr
 
 void Protocol::bufferToDatagram(Datagram &datagramBuff, const std::vector<unsigned char> &bytesBuffer) {
 	datagramBuff.setSourceAddress(TypeUtils::buffToUnsignedInt(bytesBuffer, 0));
-	datagramBuff.setSourceAddress(TypeUtils::buffToUnsignedInt(bytesBuffer, 4));
+	datagramBuff.setDestinAddress(TypeUtils::buffToUnsignedInt(bytesBuffer, 4));
 	datagramBuff.setSourcePort(TypeUtils::buffToUnsignedShort(bytesBuffer, 8));
 	datagramBuff.setDestinationPort(TypeUtils::buffToUnsignedShort(bytesBuffer, 10));
 	datagramBuff.setVersion(TypeUtils::buffToUnsignedShort(bytesBuffer, 12));
@@ -193,4 +162,22 @@ void Protocol::setFlags(Datagram *datagram, Flags *flags) {
 		datagram->setIsFIN();
 	if (flags->END)
 		datagram->setIsEND();
+	if (flags->BROADCAST)
+		datagram->setIsBROADCAST();
+}
+
+void Protocol::setBroadcast(Request *request) {
+	auto broadcastAddr = broadcastAddress();
+	request->clientRequest->sin_addr.s_addr = broadcastAddr.sin_addr.s_addr;
+	request->clientRequest->sin_port = broadcastAddr.sin_port;
+	request->clientRequest->sin_family = broadcastAddr.sin_family;
+}
+
+
+sockaddr_in Protocol::broadcastAddress() {
+	sockaddr_in broadcastAddr{};
+	broadcastAddr.sin_family = AF_INET;
+	broadcastAddr.sin_port = htons(8888); // Should be sent to all ports
+	broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
+	return broadcastAddr;
 }

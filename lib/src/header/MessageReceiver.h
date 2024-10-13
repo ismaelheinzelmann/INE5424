@@ -5,50 +5,54 @@
 
 #include "BlockingQueue.h"
 
-#include "Datagram.h"
-#include "Message.h"
 #include <map>
-#include <vector>
 #include <shared_mutex>
 #include <thread>
+#include <vector>
+#include "Datagram.h"
+#include "Message.h"
 
 #include "Request.h"
 
+#include "DatagramController.h"
+
 // Thread that verifies every N seconds and remove requisitions that timedout;
-class MessageReceiver
-{
+class MessageReceiver {
 public:
-    MessageReceiver(BlockingQueue<std::pair<bool,std::vector<unsigned char>>>* messageQueue, BlockingQueue<Request *>* requestQueue);
-    ~MessageReceiver();
-    void stop();
-    void handleMessage(Request *request, int socketfd);
+	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
+					DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
+					unsigned short id);
+	~MessageReceiver();
+	void stop();
+	void handleMessage(Request *request, int socketfd);
+	void handleBroadcastMessage(Request *request, int socketfd);
 
 private:
-    std::map<std::pair<in_addr_t, in_port_t>, Message*> messages;
-    std::shared_mutex messagesMutex;
-    BlockingQueue<std::pair<bool,std::vector<unsigned char>>> *messageQueue;
-    BlockingQueue<Request*> *requestQueue;
-    std::thread cleanseThread;
+	std::map<std::pair<in_addr_t, in_port_t>, Message *> messages;
+	std::shared_mutex messagesMutex;
+	BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue;
+	std::thread cleanseThread;
+	DatagramController *datagramController;
+	unsigned short id;
+	// Cleanse
+	std::condition_variable cv;
+	std::mutex mtx;
+	std::atomic<bool> running{true};
+	std::map<unsigned short, sockaddr_in> *configs;
 
-    // Cleanse
-    std::condition_variable cv;
-    std::mutex mtx;
-    std::atomic<bool> running{true};
-
-    void handleFirstMessage(Request* request, int socketfd);
-    void handleDataMessage(Request* request, int socketfd);
-    static bool verifyMessage(Request* request);
-    static std::pair<in_addr_t, in_port_t> getIdentifier(sockaddr_in* from);
-    static bool sendDatagramSYNACK(Datagram* datagram, sockaddr_in* from, int socketfd);
-    Message* getMessage(sockaddr_in* from);
-    static bool sendDatagramACK(Request* request, int socketfd);
-    static bool sendDatagramNACK(Request* request, int socketfd);
-    static bool sendDatagramFINACK(Request* request, int socketfd);
-    static bool sendDatagramFIN(Request* request, int socketfd);
-    void cleanse();
-
-
+	void handleFirstMessage(Request *request, int socketfd, bool broadcast = false);
+	void deliverBroadcast(Message *message);
+	void handleBroadcastDataMessage(Request *request, int socketfd);
+	static bool verifyMessage(Request *request);
+	void handleDataMessage(Request *request, int socketfd);
+	bool sendDatagramSYNACK(Request *request, int socketfd);
+	Message *getMessage(Datagram *datagram);
+	bool sendDatagramACK(Request *request, int socketfd);
+	bool sendDatagramNACK(Request *request, int socketfd);
+	bool sendDatagramFINACK(Request *request, int socketfd);
+	bool sendDatagramFIN(Request *request, int socketfd);
+	void cleanse();
 };
 
 
-#endif //MESSAGEHANDLER_H
+#endif // MESSAGEHANDLER_H

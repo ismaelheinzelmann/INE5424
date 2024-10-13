@@ -8,7 +8,6 @@
 #include <vector>
 #include "MessageSender.h"
 #include "MessageReceiver.h"
-#include "Request.h"
 #include "BlockingQueue.h"
 
 #ifndef RELIABLE_H
@@ -20,8 +19,9 @@ public:
 	ReliableCommunication(std::string configFilePath, unsigned short nodeID);
 	~ReliableCommunication();
 	void printNodes(std::mutex* printLock) const;
+	bool send(unsigned short id, std::vector<unsigned char> &data);
+	bool sendBroadcast(std::vector<unsigned char> &data);
 	std::string getBroadcastType() const;
-	bool send(unsigned short id, std::vector<unsigned char>& data);
 	void stop();
 	void listen();
 	// If false, RC stoppend listen
@@ -29,6 +29,7 @@ public:
 
 private:
 	int socketInfo;
+	int broadcastInfo;
 	unsigned short id;
 	bool process = true;
 	MessageReceiver* handler;
@@ -36,12 +37,15 @@ private:
 	std::map<unsigned short, sockaddr_in> configMap;
 	std::string broadcastType;
 	BlockingQueue<std::pair<bool,std::vector<unsigned char>>> messageQueue;
-	BlockingQueue<Request*> requestQueue;
+	DatagramController datagramController;
 
 	std::thread processingThread;
+	std::thread processingBroadcastThread;
 
-	bool verifyOrigin(sockaddr_in* senderAddr);
+	bool verifyOrigin(Datagram *datagram);
+	bool verifyOriginBroadcast(int requestSourcePort);
 	void processDatagram();
+	void processBroadcastDatagram();
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);
 };

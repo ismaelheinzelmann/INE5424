@@ -1,28 +1,23 @@
 #include "../header/ConfigParser.h"
+#include <arpa/inet.h>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <netinet/in.h>
 #include <string>
 #include <sys/types.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 #define NODES_OPTION "nodes"
 
-std::string ConfigParser::cleanFile(const std::string &configFilePath)
-{
+std::string ConfigParser::cleanFile(const std::string &configFilePath) {
 	std::ifstream cf(configFilePath);
-	if (cf.fail())
-	{
+	if (cf.fail()) {
 		throw std::runtime_error("Config file could not be opened.");
 	}
 	std::string line;
 	std::string file;
-	while (std::getline(cf, line))
-	{
-		for (char character : line)
-		{
-			if (character != ' ' && character != '\n')
-			{
+	while (std::getline(cf, line)) {
+		for (char character : line) {
+			if (character != ' ' && character != '\n') {
 				file += character;
 			}
 		}
@@ -30,8 +25,7 @@ std::string ConfigParser::cleanFile(const std::string &configFilePath)
 	return file;
 }
 
-std::map<unsigned short, sockaddr_in> ConfigParser::parseNodes(const std::string &configFilePath)
-{
+std::map<unsigned short, sockaddr_in> ConfigParser::parseNodes(const std::string &configFilePath) {
 	const std::string cleanFileString = cleanFile(configFilePath);
 	const std::string searchOption = NODES_OPTION;
 	const size_t nodesStartPos = cleanFileString.find(searchOption) + searchOption.length();
@@ -40,26 +34,21 @@ std::map<unsigned short, sockaddr_in> ConfigParser::parseNodes(const std::string
 }
 
 std::map<unsigned short, sockaddr_in> ConfigParser::parseConfigurations(const std::string *nodesString,
-                                                                        const uint start)
-{
+																		const uint start) {
 	auto nodes = std::map<unsigned short, sockaddr_in>();
 	uint deep = 0, nodesPos = start, currentNodeStart = 0;
 	if (nodesString == nullptr)
 		throw std::runtime_error("nodesString is null");
-	if (nodesString->at(nodesPos) == '{')
-	{
+	if (nodesString->at(nodesPos) == '{') {
 		deep++;
 		nodesPos++;
 	}
-	while (deep != 0 && nodesPos < nodesString->length())
-	{
-		if (nodesString->at(nodesPos) == '{')
-		{
+	while (deep != 0 && nodesPos < nodesString->length()) {
+		if (nodesString->at(nodesPos) == '{') {
 			deep++;
 			currentNodeStart = nodesPos + 1;
 		}
-		if (nodesString->at(nodesPos) == '}')
-		{
+		if (nodesString->at(nodesPos) == '}') {
 			deep--;
 			if (deep == 0)
 				break;
@@ -73,22 +62,18 @@ std::map<unsigned short, sockaddr_in> ConfigParser::parseConfigurations(const st
 	return nodes;
 }
 
-void ConfigParser::parseConfiguration(const std::string &nodeString, std::map<unsigned short, sockaddr_in> *nodes)
-{
+void ConfigParser::parseConfiguration(const std::string &nodeString, std::map<unsigned short, sockaddr_in> *nodes) {
 	if (nodeString.empty())
 		throw std::runtime_error("nodeString is empty");
 	size_t comma = 0, colon = 0, i = 0;
-	while (i < nodeString.length())
-	{
-		if (nodeString.at(i) == ':')
-		{
+	while (i < nodeString.length()) {
+		if (nodeString.at(i) == ':') {
 			if (colon != 0)
 				throw std::runtime_error(
 					"Error parsing configuration file, more information could be found at README.");
 			colon = i;
 		}
-		if (nodeString.at(i) == ',')
-		{
+		if (nodeString.at(i) == ',') {
 			if (comma != 0)
 				throw std::runtime_error(
 					"Error parsing configuration file, more information could be found at README.");

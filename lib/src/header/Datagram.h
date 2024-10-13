@@ -17,6 +17,7 @@
 class Datagram {
 public:
 	Datagram();
+	Datagram(Datagram *datagram);
 	void setSourceAddress(unsigned int port);
 	void setSourcePort(unsigned short port);
 	void setDestinAddress(unsigned int port);
