@@ -159,7 +159,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 			}
 			else {
 				message->acks[identifier] = datagram->isFIN();
-				if (!message->delivered) {
+				if (!message->delivered && datagram->isFIN()) {
 					deliverBroadcast(message);
 				}
 			}
@@ -213,18 +213,11 @@ void MessageReceiver::handleBroadcastDataMessage(Request *request, int socketfd)
 		sendDatagramNACK(request, socketfd);
 		return;
 	}
+	sendDatagramACK(request, socketfd);
 	bool sent = message->addData(request->datagram);
 	if (sent) {
-		auto addr = (*configs)[id];
-		if (message->acks.contains({addr.sin_addr.s_addr, addr.sin_port})) {
-			message->acks[{addr.sin_addr.s_addr, addr.sin_port}] = true;
-		}
 		sendDatagramFINACK(request, socketfd);
-		if (!message->delivered) {
-			deliverBroadcast(message);
-		}
 	}
-	sendDatagramACK(request, socketfd);
 }
 
 

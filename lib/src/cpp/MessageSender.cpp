@@ -265,8 +265,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 						   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
-				if (verifyBatchResponded(&membersAcks, batchSize, batchStart, totalDatagrams))
-					break;
 				Datagram *response =
 					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
 														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
@@ -292,14 +290,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					if (members.contains(identifier))
 						members[identifier] = true;
 				}
-
-				// Informa que a versão foi negada.
-				if (response->isNACK()) {
-					if (membersAcks.contains(identifier))
-						membersAcks[identifier][response->getVersion() - 1].second = true;
-				}
-				if (verifyBatchResponded(&membersAcks, batchSize, batchStart, totalDatagrams))
-					break;
 			}
 			// Batch acordado, procede para o proximo batch
 			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams)) {
@@ -313,15 +303,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 				break;
 			}
 		}
-		// Remove membros que falharam em acordar batch mesmo depois de todas as tentativas
-		// removeFailed(&membersAcks, &members);
-
-		// Se menos das metades dos membros ainda estiverem vivos, declara falha
-		// if (members.size() < initialMembersSize / 2) {
-		// 	close(transientSocketFd.first);
-		// 	return false;
-		// }
-
 		// No final de uma tentativa, verifica se o batch foi acordado. Caso não, encerra o fluxo de envio.
 		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
 		if (!verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) || verifyMessageAcked(&members)) {
@@ -329,6 +310,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 		}
 	}
 	close(transientSocketFd.first);
+
 	return verifyMessageAcked(&members);
 }
 
