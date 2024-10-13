@@ -11,7 +11,7 @@
 
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 								 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-								 unsigned short id) {
+								 unsigned short id, const std::string &broadcastType) {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
 	this->datagramController = datagramController;
@@ -19,6 +19,7 @@ MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsig
 	cleanseThread.detach();
 	this->configs = configs;
 	this->id = id;
+	this-> broadcastType = broadcastType;
 }
 
 MessageReceiver::~MessageReceiver() {
@@ -185,7 +186,7 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 }
 
 void MessageReceiver::deliverBroadcast(Message *message) {
-	if (true) { // IF URB
+	if (broadcastType == "URB") {
 		if (message->allACK()) {
 			message->delivered = true;
 			messageQueue->push(std::make_pair(true, *message->getData()));
