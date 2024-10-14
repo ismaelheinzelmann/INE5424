@@ -71,7 +71,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	// End Broadcast
 
 	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType);
-	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap);
+	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType);
 
 }
 

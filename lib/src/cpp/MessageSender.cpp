@@ -26,12 +26,14 @@
 #define BATCH_SIZE 30
 
 MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
-							 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configMap) {
+							 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configMap,
+							 std::string broadcastType) {
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
 	this->datagramController = datagramController;
 	configAddr = configIdAddr;
 	this->configMap = configMap;
+	this->broadcastType = broadcastType;
 }
 
 void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
@@ -217,8 +219,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
 
 	sockaddr_in destin = Protocol::broadcastAddress();
-	// TODO Broadcast ack envia até o grupo inicial responder ou todas as tentativas.
-	// TODO Hashmap de membros SYNACK
 	auto members = std::map<std::pair<unsigned int, unsigned short>, bool>();
 	// unsigned short initialMembersSize = members.size();
 	broadcastAckAttempts(destin, &datagram, &members);
@@ -239,7 +239,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
 		unsigned short batchIndex;
-		if (verifyMessageAcked(&members) == totalDatagrams) {
+		if (verifyMessageAckedURB(&members)) {
 			close(transientSocketFd.first);
 			return true;
 		}
@@ -295,23 +295,15 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams)) {
 				break;
 			}
-			// Verifica se o batch foi ao menos respondido, caso tenha sido, mesmo que com algum NACK, procede para
-			// retransmissão (se for o caso).
-			if (verifyBatchResponded(&membersAcks, batchSize, batchStart, totalDatagrams)) {
-				Logger::log("Batch " + std::to_string(batchStart + 1) + " responded, but not aknowledged.",
-							LogLevel::DEBUG);
-				break;
-			}
 		}
-		// No final de uma tentativa, verifica se o batch foi acordado. Caso não, encerra o fluxo de envio.
+		// No final das tentativas, verifica se o batch foi acordado. Caso não, encerra o fluxo de envio.
 		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
-		if (!verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) || verifyMessageAcked(&members)) {
+		if (!verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) || verifyMessageAckedURB(&members)) {
 			break;
 		}
 	}
 	close(transientSocketFd.first);
-
-	return verifyMessageAcked(&members);
+	return broadcastType == "BEB" ? verifyMessageAckedBEB(&members) : verifyMessageAckedURB(&members);
 }
 
 void MessageSender::removeFailed(
@@ -361,12 +353,21 @@ std::pair<int, sockaddr_in> MessageSender::createUDPSocketAndGetPort() {
 	return {sockfd, addr};
 }
 
-bool MessageSender::verifyMessageAcked(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks) {
+bool MessageSender::verifyMessageAckedURB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks) {
 	for (auto &&member : *membersAcks) {
 		if (!member.second)
 			return false;
 	}
 	return true;
+}
+
+bool MessageSender::verifyMessageAckedBEB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks) {
+	unsigned short totalSYNACK = 0;
+	for (auto &&member : *membersAcks) {
+		if (member.second)
+			totalSYNACK++;
+	}
+	return totalSYNACK >= membersAcks->size() / 2;
 }
 
 bool MessageSender::verifyBatchAcked(
@@ -477,7 +478,6 @@ void MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 					}
 				}
 			}
-
 		}
 	}
 }
