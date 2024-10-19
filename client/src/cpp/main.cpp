@@ -54,10 +54,9 @@ int main(int argc, char *argv[])
 			rb.printNodes(&g_lock);
 			std::cout << "Choose which node you want to send the message:" << std::endl;
 			std::cin >> idString;
-			std::cin.ignore();
+			std::cin.ignore(); // Remove this if necessary
 			std::string message = std::string();
 			std::cout << "Write the message:" << std::endl;
-			std::cin.ignore();
 			std::getline(std::cin, message);
 			std::vector<unsigned char> messageBytes(message.begin(), message.end());
 			auto before = std::chrono::system_clock::now();
@@ -73,7 +72,6 @@ int main(int argc, char *argv[])
 			std::cout << "Broadcast type: " << bcType << std::endl;
 			std::string message = std::string();
 			std::cout << "Write the message:" << std::endl;
-			std::cin.ignore();
 			std::getline(std::cin, message);
 			std::vector<unsigned char> messageBytes(message.begin(), message.end());
 			auto before = std::chrono::system_clock::now();
@@ -89,6 +87,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+
 
 	if (printThread.joinable())
 	{
