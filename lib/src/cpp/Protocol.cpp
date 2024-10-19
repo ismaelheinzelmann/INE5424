@@ -154,8 +154,6 @@ bool Protocol::sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, F
 void Protocol::setFlags(Datagram *datagram, Flags *flags) {
 	if (flags->ACK)
 		datagram->setIsACK();
-	if (flags->NACK)
-		datagram->setIsNACK();
 	if (flags->SYN)
 		datagram->setIsSYN();
 	if (flags->FIN)

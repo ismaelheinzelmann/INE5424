@@ -37,8 +37,7 @@ MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configId
 }
 
 void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
-								   std::map<unsigned short, bool> *acknowledgments,
-								   std::map<unsigned short, bool> *responses, in_port_t transientPort,
+								   std::map<unsigned short, bool> *acknowledgments, in_port_t transientPort,
 								   unsigned short totalDatagrams, std::vector<unsigned char> &message) {
 	for (int i = 0; i < totalDatagrams; ++i) {
 		auto versionDatagram = Datagram();
@@ -58,7 +57,6 @@ void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *data
 		Protocol::setChecksum(&serializedDatagram);
 		(*datagrams)[i] = serializedDatagram;
 		(*acknowledgments)[i] = false;
-		(*responses)[i] = false;
 	}
 }
 
@@ -110,9 +108,8 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	}
 	// build of datagrams
 	std::vector<std::vector<unsigned char>> datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
-	std::map<unsigned short, bool> acknowledgments, responses;
-	buildDatagrams(&datagrams, &acknowledgments, &responses, transientSocketFd.second.sin_port, totalDatagrams,
-				   message);
+	std::map<unsigned short, bool> acknowledgments;
+	buildDatagrams(&datagrams, &acknowledgments, transientSocketFd.second.sin_port, totalDatagrams, message);
 
 	unsigned short batchSize = BATCH_SIZE, sent = 0, acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
@@ -153,7 +150,6 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					Logger::log("Datagram of version " + std::to_string(response->getVersion()) + " accepted.",
 								LogLevel::DEBUG);
 					acknowledgments[response->getVersion() - 1] = true;
-					responses[response->getVersion() - 1] = true;
 					batchAck++;
 					sent++;
 					acks++;
@@ -171,26 +167,9 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					return false;
 				}
 
-				// Informa que a versão foi negada.
-				if (response->isNACK()) {
-					responses[response->getVersion() - 1] = true;
-				}
-
 				// Batch acordado, procede para o proximo batch
 				if (batchAck == batchSize) {
 					Logger::log("Batch " + std::to_string(batchStart + 1) + " aknowledged.", LogLevel::DEBUG);
-					break;
-				}
-
-				// Verifica se o batch foi ao menos respondido, caso tenha sido, mesmo que com algum NACK, procede para
-				// retransmissão (se for o caso).
-				auto responsesCounter = 0;
-				for (auto &&p : responses)
-					if (p.second)
-						++responsesCounter;
-				if (responsesCounter == batchSize) {
-					Logger::log("Batch " + std::to_string(batchStart + 1) + " responded, but not aknowledged.",
-								LogLevel::DEBUG);
 					break;
 				}
 			}
@@ -388,26 +367,6 @@ bool MessageSender::verifyBatchAcked(
 	}
 	return true;
 }
-
-bool MessageSender::verifyBatchResponded(
-	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
-	unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams) {
-
-	unsigned short batchStart = batchSize * batchIndex, batchEnd = (batchSize * batchIndex) + batchSize;
-	for (int i = batchStart; i < batchEnd; ++i) {
-		if (i >= totalDatagrams) {
-			break;
-		}
-		for (auto &&member : *membersAcks) {
-			for (auto &&[ack, response] : member.second) {
-				if (!response.second)
-					return false;
-			}
-		}
-	}
-	return true;
-}
-
 
 unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength) {
 	const double result = static_cast<double>(dataLength) / 1024;

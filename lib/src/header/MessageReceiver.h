@@ -51,7 +51,6 @@ private:
 	bool sendDatagramSYNACK(Request *request, int socketfd);
 	Message *getMessage(Datagram *datagram);
 	bool sendDatagramACK(Request *request, int socketfd);
-	bool sendDatagramNACK(Request *request, int socketfd);
 	bool sendDatagramFINACK(Request *request, int socketfd);
 	bool sendDatagramFIN(Request *request, int socketfd);
 	void cleanse();

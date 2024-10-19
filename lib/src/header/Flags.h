@@ -3,7 +3,6 @@
 #define FLAGS_H
 struct Flags {
 	bool ACK = false;
-	bool NACK = false;
 	bool SYN = false;
 	bool FIN = false;
 	bool END = false;

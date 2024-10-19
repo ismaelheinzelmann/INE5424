@@ -87,7 +87,6 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
 		return;
 	}
 	if (!message->verifyMessage(*(request->datagram))) {
-		sendDatagramNACK(request, socketfd);
 		return;
 	}
 	bool sent = message->addData(request->datagram);
@@ -104,7 +103,6 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
 void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	if (!verifyMessage(request)) {
-		sendDatagramNACK(request, socketfd);
 		return;
 	}
 
@@ -115,7 +113,7 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	}
 	if ((request->datagram->isSYN() && request->datagram->isACK()) ||
 		(request->datagram->isFIN() && request->datagram->isACK()) || request->datagram->isACK() ||
-		request->datagram->isNACK() || request->datagram->isFIN()) {
+		request->datagram->isFIN()) {
 		std::shared_lock lock(messagesMutex);
 		Message *message = getMessage(request->datagram);
 		if (message == nullptr)
@@ -132,7 +130,6 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	if (!verifyMessage(request)) {
-		sendDatagramNACK(request, socketfd);
 		return;
 	}
 	Protocol::setBroadcast(request);
@@ -143,7 +140,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 		return;
 	}
 	if ((datagram->isSYN() && datagram->isACK()) || (datagram->isFIN() && datagram->isACK()) || datagram->isACK() ||
-		datagram->isNACK() || datagram->isFIN()) {
+		datagram->isFIN()) {
 		std::shared_lock lock(messagesMutex);
 		Message *message = getMessage(datagram);
 		if (message == nullptr)
@@ -211,7 +208,6 @@ void MessageReceiver::handleBroadcastDataMessage(Request *request, int socketfd)
 		return;
 	}
 	if (!message->verifyMessage(*request->datagram)) {
-		sendDatagramNACK(request, socketfd);
 		return;
 	}
 	sendDatagramACK(request, socketfd);
@@ -243,18 +239,6 @@ bool MessageReceiver::sendDatagramACK(Request *request, int socketfd) {
 	flags.ACK = true;
 	Protocol::setFlags(&datagramACK, &flags);
 	return Protocol::sendDatagram(&datagramACK, request->clientRequest, socketfd, &flags);
-}
-
-bool MessageReceiver::sendDatagramNACK(Request *request, int socketfd) {
-	auto datagramNACK = Datagram(request->datagram);
-	datagramNACK.setVersion(request->datagram->getVersion());
-	sockaddr_in source = configs->at(id);
-	datagramNACK.setSourceAddress(source.sin_addr.s_addr);
-	datagramNACK.setSourcePort(source.sin_port);
-	Flags flags;
-	flags.NACK = true;
-	Protocol::setFlags(&datagramNACK, &flags);
-	return Protocol::sendDatagram(&datagramNACK, request->clientRequest, socketfd, &flags);
 }
 
 bool MessageReceiver::sendDatagramFIN(Request *request, int socketfd) {

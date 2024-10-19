@@ -86,7 +86,6 @@ bool Datagram::isACK() { return this->isBitSet(this->getFlags(), 0); }
 
 bool Datagram::isSYN() { return this->isBitSet(this->getFlags(), 1); }
 
-bool Datagram::isNACK() { return this->isBitSet(this->getFlags(), 2); }
 
 bool Datagram::isFIN() { return this->isBitSet(this->getFlags(), 3); }
 
@@ -98,7 +97,6 @@ void Datagram::setIsACK() { this->setFlags(this->setBit(this->getFlags(), 0)); }
 
 void Datagram::setIsSYN() { this->setFlags(this->setBit(this->getFlags(), 1)); }
 
-void Datagram::setIsNACK() { this->setFlags(this->setBit(this->getFlags(), 2)); }
 
 void Datagram::setIsFIN() { this->setFlags(this->setBit(this->getFlags(), 3)); }
 

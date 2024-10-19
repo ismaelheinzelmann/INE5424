@@ -43,13 +43,11 @@ public:
 	// Flag based
 	bool isACK(); // First bit
 	bool isSYN(); // Second bit
-	bool isNACK(); // Third bit
 	bool isFIN();
 	bool isEND();
 	bool isBROADCAST();
 	void setIsACK();
 	void setIsSYN();
-	void setIsNACK();
 	void setIsFIN();
 	void setIsEND();
 	void setIsBROADCAST();

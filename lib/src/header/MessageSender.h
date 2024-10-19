@@ -37,13 +37,10 @@ private:
 	static bool verifyBatchAcked(
 		std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
 		unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams);
-	bool verifyBatchResponded(
-		std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
-		unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams);
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);
 
 	void buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
-						std::map<unsigned short, bool> *acknowledgments, std::map<unsigned short, bool> *responses,
+						std::map<unsigned short, bool> *acknowledgments,
 						in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char> &message);
 	void buildBroadcastDatagrams(
 		std::vector<std::vector<unsigned char>> *datagrams,
