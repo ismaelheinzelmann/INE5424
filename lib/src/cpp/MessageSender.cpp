@@ -31,7 +31,7 @@ MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configId
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
 	this->datagramController = datagramController;
-	configAddr = configIdAddr;
+	this->configAddr = configIdAddr;
 	this->configMap = configMap;
 	this->broadcastType = broadcastType;
 }
@@ -200,8 +200,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	sockaddr_in destin = Protocol::broadcastAddress();
 	auto members = std::map<std::pair<unsigned int, unsigned short>, bool>();
 	// unsigned short initialMembersSize = members.size();
-	broadcastAckAttempts(destin, &datagram, &members);
-	if (members.empty()) {
+	if (!broadcastAckAttempts(destin, &datagram, &members)) {
 		close(transientSocketFd.first);
 		return false;
 	}
@@ -402,7 +401,7 @@ bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram) {
 	return false;
 }
 
-void MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
+bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
 										 std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
 	Flags flags;
 	flags.SYN = true;
@@ -420,7 +419,7 @@ void MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 		}
 		while (true) {
 			if (members->size() == configMap->size()) {
-				break;
+				return true;
 			}
 			Datagram *response =
 				datagramController->getDatagramTimeout({datagram->getSourceAddress(), datagram->getDestinationPort()},
@@ -439,4 +438,5 @@ void MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 			}
 		}
 	}
+	return members->size() == configMap->size();
 }
