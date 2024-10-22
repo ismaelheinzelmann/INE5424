@@ -16,7 +16,7 @@
 #include <random>
 #include <thread>
 
-#define RETRY_ACK_ATTEMPT 5
+#define RETRY_ACK_ATTEMPT 3
 #define RETRY_ACK_TIMEOUT_USEC 200
 
 #define RETRY_DATA_ATTEMPT 6
@@ -243,6 +243,10 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 						   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
+				if (verifyMessageAckedURB(&members)) {
+					close(transientSocketFd.first);
+					return broadcastType == BEB ? verifyMessageAckedBEB(&members) : verifyMessageAckedURB(&members);
+				}
 				Datagram *response =
 					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
 														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
@@ -281,7 +285,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 		}
 	}
 	close(transientSocketFd.first);
-	return broadcastType == "BEB" ? verifyMessageAckedBEB(&members) : verifyMessageAckedURB(&members);
+	return broadcastType == BEB ? verifyMessageAckedBEB(&members) : verifyMessageAckedURB(&members);
 }
 
 void MessageSender::removeFailed(

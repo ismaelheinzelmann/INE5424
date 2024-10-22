@@ -31,7 +31,7 @@ private:
 	sockaddr_in configAddr;
 	std::map<unsigned short, sockaddr_in> *configMap;
 	DatagramController *datagramController;
-	std::string broadcastType;
+	BroadcastType broadcastType;
 	std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	bool verifyMessageAckedURB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);
 	bool verifyMessageAckedBEB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);

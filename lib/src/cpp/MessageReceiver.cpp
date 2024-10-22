@@ -133,12 +133,21 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	Datagram *datagram = request->datagram;
 	if (broadcastType == AB) {
 		std::pair id = {request->datagram->getSourceAddress(), request->datagram->getDestinationPort()};
-		if (channelOccupied && (channelMessageIP != id.first || channelMessagePort != id.second)) {
-			std::shared_lock lock(messagesMutex);
+		// PROBLEMA DEVE TA AQ EM BAIXO
+		if (channelOccupied && channelMessageIP != id.first && channelMessagePort != id.second
+			&& (channelMessageIP != 0 && channelMessagePort != 0)) {
 			std::pair<unsigned int, unsigned short> identifier = {channelMessageIP, channelMessagePort};
-			std::pair consent = verifyConsensus();
-			if (!messages[identifier]->delivered || !messages[consent]->delivered)
+			if (!messages[identifier]->delivered) {
+				std::cout<<"MESSAGE REFUSED"<<std::endl;
 				return;
+			}
+			std::pair consent = verifyConsensus();
+			if (messages.contains(consent)) {
+				if (!messages[consent]->delivered) {
+					std::cout<<"MESSAGE REFUSED 00"<<std::endl;
+					return;
+				}
+			}
 		}
 	}
 	// Data datagram
