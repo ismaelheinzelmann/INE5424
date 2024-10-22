@@ -114,10 +114,6 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	if ((request->datagram->isSYN() && request->datagram->isACK()) ||
 		(request->datagram->isFIN() && request->datagram->isACK()) || request->datagram->isACK() ||
 		request->datagram->isFIN()) {
-		std::shared_lock lock(messagesMutex);
-		Message *message = getMessage(request->datagram);
-		if (message == nullptr)
-			return;
 		datagramController->insertDatagram(
 			{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}, request->datagram);
 		return;

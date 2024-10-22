@@ -48,7 +48,7 @@ private:
 		in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char> &message,
 		std::map<std::pair<unsigned int, unsigned short>, bool> *members);
 	bool ackAttempts(sockaddr_in &destin, Datagram *datagram);
-	void broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
+	bool broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
 							  std::map<std::pair<unsigned int, unsigned short>, bool> *members);
 };
 

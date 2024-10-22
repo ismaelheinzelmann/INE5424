@@ -70,6 +70,7 @@ int main(int argc, char *argv[])
 		{
 			std::string bcType = rb.getBroadcastType();
 			std::cout << "Broadcast type: " << bcType << std::endl;
+			std::cin.ignore(); // Remove this if necessary
 			std::string message = std::string();
 			std::cout << "Write the message:" << std::endl;
 			std::getline(std::cin, message);
