@@ -124,6 +124,7 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	}
 }
 
+
 void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	if (!verifyMessage(request)) {
@@ -131,14 +132,25 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	}
 	Protocol::setBroadcast(request);
 	Datagram *datagram = request->datagram;
+	if (datagram->isHEARTBEAT()) {
+		std::unique_lock hblock(heartbeatsLock);
+		heartbeats[{datagram->getSourceAddress(), datagram->getSourcePort()}] = {datagram->getDestinAddress(), datagram->getDestinationPort()};
+	}
 	if (broadcastType == AB) {
 		std::pair id = {request->datagram->getSourceAddress(), request->datagram->getDestinationPort()};
-		if (channelOccupied && (channelMessageIP != id.first || channelMessagePort != id.second)) {
-			std::shared_lock lock(messagesMutex);
+		// PROBLEMA DEVE TA AQ EM BAIXO
+		if (channelOccupied && channelMessageIP != id.first && channelMessagePort != id.second
+			&& (channelMessageIP != 0 && channelMessagePort != 0)) {
 			std::pair<unsigned int, unsigned short> identifier = {channelMessageIP, channelMessagePort};
-			std::pair consent = verifyConsensus();
-			if (!messages[identifier]->delivered || !messages[consent]->delivered)
+			if (!messages[identifier]->delivered) {
 				return;
+			}
+			std::pair consent = verifyConsensus();
+			if (messages.contains(consent)) {
+				if (!messages[consent]->delivered) {
+					return;
+				}
+			}
 		}
 	}
 	// Data datagram
@@ -165,7 +177,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 			else {
 				message->acks[identifier] = datagram->isFIN();
 				if (!message->delivered && datagram->isFIN()) {
-					deliverBroadcast(message);
+					deliverBroadcast(message, socketfd);
 				}
 			}
 		}
@@ -225,13 +237,14 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 	sendDatagramSYNACK(request, socketfd);
 }
 
-void MessageReceiver::deliverBroadcast(Message *message) {
+void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 	switch (broadcastType) {
 	case AB:
 		if (!message->allACK() || message->delivered)
 			return;
 		channelOccupied = false;
 		message->delivered = true;
+		sendHEARTBEAT({0,0}, broadcastfd);
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;
 	case URB:

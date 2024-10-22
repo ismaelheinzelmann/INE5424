@@ -54,7 +54,7 @@ private:
 	BroadcastType broadcastType;
 
 	void handleFirstMessage(Request *request, int socketfd, bool broadcast = false);
-	void deliverBroadcast(Message *message);
+	void deliverBroadcast(Message *message, int broadcastfd);
 	void handleBroadcastDataMessage(Request *request, int socketfd);
 	static bool verifyMessage(Request *request);
 	void handleDataMessage(Request *request, int socketfd);
