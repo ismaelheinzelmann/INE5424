@@ -1,4 +1,6 @@
 #include "../header/ConfigParser.h"
+
+#include "BroadcastType.h"
 #include <arpa/inet.h>
 #include <fstream>
 #include <iostream>
@@ -93,12 +95,19 @@ void ConfigParser::parseConfiguration(const std::string &nodeString, std::map<un
 	nodes->insert({id, node});
 }
 
-std::string ConfigParser::parseBroadcast(const std::string &configFilePath)
+BroadcastType ConfigParser::parseBroadcast(const std::string &configFilePath)
 {
     const std::string cleanFileString = cleanFile(configFilePath);
     const std::string searchOption = "broadcast";
     const size_t broadcastStartPos = cleanFileString.find(searchOption) + searchOption.length();
     const size_t equalSignPos = cleanFileString.find('=', broadcastStartPos) + 1;
     const size_t semicolonPos = cleanFileString.find(';', equalSignPos);
-    return cleanFileString.substr(equalSignPos, semicolonPos - equalSignPos);
+	auto type = cleanFileString.substr(equalSignPos, semicolonPos - equalSignPos);
+	if (type == "URB") {
+		return URB;
+	}
+	if (type == "AB") {
+		return AB;
+	}
+    return BEB;
 }

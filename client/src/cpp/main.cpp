@@ -5,6 +5,7 @@
 #include <mutex>
 #include "../../../lib/src/header/ReliableCommunication.h"
 #include "../../../lib/src/header/Logger.h"
+#include "../../../lib/src/header/BroadcastType.h"
 
 std::mutex g_lock;
 bool g_running = true;
@@ -68,7 +69,7 @@ int main(int argc, char *argv[])
 		}
 		else if (type == "2")
 		{
-			std::string bcType = rb.getBroadcastType();
+			std::string bcType = BroadcastTypeToString(rb.getBroadcastType());
 			std::cout << "Broadcast type: " << bcType << std::endl;
 			std::cin.ignore(); // Remove this if necessary
 			std::string message = std::string();

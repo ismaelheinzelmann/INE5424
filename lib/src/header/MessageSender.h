@@ -7,6 +7,8 @@
 #include <vector>
 #include "DatagramController.h"
 
+#include "BroadcastType.h"
+
 #ifndef MESSAGESENDER_H
 #define MESSAGESENDER_H
 
@@ -14,7 +16,7 @@
 class MessageSender {
 public:
 	explicit MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr, DatagramController *datagramController,
-				  std::map<unsigned short, sockaddr_in> *configMap, std::string broadcastType);
+				  std::map<unsigned short, sockaddr_in> *configMap, BroadcastType broadcastType);
 
 	~MessageSender() = default;
 	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);

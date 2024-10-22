@@ -1,5 +1,6 @@
 #include "../header/MessageReceiver.h"
 
+#include "BroadcastType.h"
 #include <iostream>
 #include <map>
 #include <shared_mutex>
@@ -11,7 +12,7 @@
 
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 								 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-								 unsigned short id, const std::string &broadcastType) {
+								 unsigned short id, const BroadcastType &broadcastType) {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
 	this->datagramController = datagramController;

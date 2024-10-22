@@ -1,5 +1,6 @@
 #include "../header/ReliableCommunication.h"
 
+#include "BroadcastType.h"
 #include <Logger.h>
 
 #include <cmath>
@@ -183,7 +184,7 @@ void ReliableCommunication::printNodes(std::mutex *printLock) const {
 		std::cout << fst << std::endl;
 }
 
-std::string ReliableCommunication::getBroadcastType() const
+BroadcastType ReliableCommunication::getBroadcastType() const
 {
 	return this->broadcastType;
 }

@@ -27,7 +27,7 @@
 
 MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
 							 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configMap,
-							 std::string broadcastType) {
+							 BroadcastType broadcastType) {
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
 	this->datagramController = datagramController;

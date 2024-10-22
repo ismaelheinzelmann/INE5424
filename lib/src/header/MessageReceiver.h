@@ -16,14 +16,15 @@
 
 #include "DatagramController.h"
 
+#include "BroadcastType.h"
+
 
 // Thread that verifies every N seconds and remove requisitions that timedout;
 class MessageReceiver {
 public:
-	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *blocking_queue,
-					DatagramController *datagram_controller, std::map<unsigned short, sockaddr_in> *map,
-					unsigned short id, const std::string &broadcastType);
-
+	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
+					DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
+					unsigned short id, const BroadcastType &broadcastType);
 	~MessageReceiver();
 	void stop();
 	void handleMessage(Request *request, int socketfd);
