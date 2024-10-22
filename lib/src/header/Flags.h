@@ -7,6 +7,7 @@ struct Flags {
 	bool FIN = false;
 	bool END = false;
 	bool BROADCAST = false;
+	bool HEARTBEAT = false;
 };
 
 #endif // FLAGS_H

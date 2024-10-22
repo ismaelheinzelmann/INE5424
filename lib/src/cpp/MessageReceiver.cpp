@@ -1,10 +1,10 @@
 #include "../header/MessageReceiver.h"
 
-#include "BroadcastType.h"
 #include <iostream>
 #include <map>
 #include <shared_mutex>
 #include "BlockingQueue.h"
+#include "BroadcastType.h"
 #include "Datagram.h"
 #include "Logger.h"
 #include "Protocol.h"
@@ -20,7 +20,7 @@ MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsig
 	cleanseThread.detach();
 	this->configs = configs;
 	this->id = id;
-	this-> broadcastType = broadcastType;
+	this->broadcastType = broadcastType;
 }
 
 MessageReceiver::~MessageReceiver() {
@@ -131,6 +131,16 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	}
 	Protocol::setBroadcast(request);
 	Datagram *datagram = request->datagram;
+	if (broadcastType == AB) {
+		std::pair id = {request->datagram->getSourceAddress(), request->datagram->getDestinationPort()};
+		if (channelOccupied && (channelMessageIP != id.first || channelMessagePort != id.second)) {
+			std::shared_lock lock(messagesMutex);
+			std::pair<unsigned int, unsigned short> identifier = {channelMessageIP, channelMessagePort};
+			std::pair consent = verifyConsensus();
+			if (!messages[identifier]->delivered || !messages[consent]->delivered)
+				return;
+		}
+	}
 	// Data datagram
 	if (datagram->getFlags() == 0) {
 		handleBroadcastDataMessage(request, socketfd);
@@ -167,7 +177,43 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	}
 }
 
+std::pair<unsigned int, unsigned short> MessageReceiver::verifyConsensus() {
+	std::map<std::pair<in_addr_t, in_port_t>, int> countMap;
+
+	// Iterate over the heartbeats map to populate the countMap
+	for (const auto &entry : heartbeats) {
+		countMap[entry.second]++; // Increment count for each value
+	}
+
+	// Move the values and counts into a vector for sorting
+	std::vector<std::pair<std::pair<in_addr_t, in_port_t>, int>> sortedCounts(countMap.begin(), countMap.end());
+
+	// Sort the vector: first by count (descending), then by IP (ascending), and finally by port (ascending)
+	std::sort(sortedCounts.begin(), sortedCounts.end(), [](const auto &a, const auto &b) {
+		if (a.second != b.second) {
+			return a.second > b.second; // Sort by count, descending
+		}
+		if (a.first.first != b.first.first) {
+			return a.first.first < b.first.first; // Sort by IP, ascending
+		}
+		return a.first.second < b.first.second; // Sort by port, ascending
+	});
+	if (!sortedCounts.empty()) {
+		const auto &result = sortedCounts.front().first;
+		return {result.first, result.second}; // Return the IP and port pair
+	}
+
+	// Return default values if the heartbeats map is empty
+	return {0, 0};
+}
+
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool broadcast) {
+	if (broadcast && broadcastType == AB) {
+		channelMessageIP = request->datagram->getSourceAddress();
+		channelMessagePort = request->datagram->getDestinationPort();
+		sendHEARTBEAT({channelMessageIP, channelMessagePort}, socketfd);
+		channelOccupied = true;
+	}
 	if (messages.contains({request->datagram->getSourceAddress(), request->datagram->getDestinationPort()})) {
 		sendDatagramSYNACK(request, socketfd);
 	}
@@ -180,15 +226,26 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 }
 
 void MessageReceiver::deliverBroadcast(Message *message) {
-	if (broadcastType == "URB") {
-		if (message->allACK()) {
-			message->delivered = true;
-			messageQueue->push(std::make_pair(true, *message->getData()));
-		}
-	}
-	else {
+	switch (broadcastType) {
+	case AB:
+		if (!message->allACK() || message->delivered)
+			return;
+		channelOccupied = false;
 		message->delivered = true;
 		messageQueue->push(std::make_pair(true, *message->getData()));
+		break;
+	case URB:
+		if (!message->allACK() || message->delivered)
+			return;
+		message->delivered = true;
+		messageQueue->push(std::make_pair(true, *message->getData()));
+		break;
+	default:
+		if (message->delivered)
+			return;
+		message->delivered = true;
+		messageQueue->push(std::make_pair(true, *message->getData()));
+		break;
 	}
 }
 void MessageReceiver::handleBroadcastDataMessage(Request *request, int socketfd) {
@@ -275,5 +332,21 @@ bool MessageReceiver::sendDatagramSYNACK(Request *request, int socketfd) {
 	flags.ACK = true;
 	Protocol::setFlags(&datagramSYNACK, &flags);
 	bool sent = Protocol::sendDatagram(&datagramSYNACK, request->clientRequest, socketfd, &flags);
+	return sent;
+}
+
+bool MessageReceiver::sendHEARTBEAT(std::pair<unsigned int, unsigned short> target, int socketfd) {
+	auto heartbeat = Datagram();
+	sockaddr_in source = configs->at(id);
+	heartbeat.setSourceAddress(source.sin_addr.s_addr);
+	heartbeat.setSourcePort(source.sin_port);
+	heartbeat.setDestinAddress(target.first);
+	heartbeat.setDestinationPort(target.second);
+
+	Flags flags;
+	flags.HEARTBEAT = true;
+	Protocol::setFlags(&heartbeat, &flags);
+	auto addr = Protocol::broadcastAddress();
+	bool sent = Protocol::sendDatagram(&heartbeat, &addr, socketfd, &flags);
 	return sent;
 }

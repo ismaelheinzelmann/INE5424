@@ -16,7 +16,7 @@
 #include <random>
 #include <thread>
 
-#define RETRY_ACK_ATTEMPT 3
+#define RETRY_ACK_ATTEMPT 5
 #define RETRY_ACK_TIMEOUT_USEC 200
 
 #define RETRY_DATA_ATTEMPT 6

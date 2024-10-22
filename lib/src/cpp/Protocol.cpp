@@ -162,6 +162,8 @@ void Protocol::setFlags(Datagram *datagram, Flags *flags) {
 		datagram->setIsEND();
 	if (flags->BROADCAST)
 		datagram->setIsBROADCAST();
+	if (flags->BROADCAST)
+		datagram->setIsHEARTBEAT();
 }
 
 void Protocol::setBroadcast(Request *request) {
