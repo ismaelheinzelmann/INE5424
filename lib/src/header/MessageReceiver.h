@@ -48,6 +48,7 @@ private:
 	std::atomic<unsigned int> channelMessageIP = 0;
 	std::atomic<unsigned short> channelMessagePort = 0;
 	std::map<std::pair<in_addr_t, in_port_t>, std::pair<in_addr_t, in_port_t>> heartbeats;
+	std::map<std::pair<in_addr_t, in_port_t>, std::chrono::system_clock::time_point> heartbeatsTimes;
 	std::mutex heartbeatsLock;
 
 	// Cleanse

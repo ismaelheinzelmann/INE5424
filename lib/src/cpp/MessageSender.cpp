@@ -247,9 +247,10 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 						   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
+				// Todos responderam FINACK
 				if (verifyMessageAckedURB(&members)) {
 					close(transientSocketFd.first);
-					return broadcastType == BEB ? verifyMessageAckedBEB(&members) : verifyMessageAckedURB(&members);
+					return true;
 				}
 				Datagram *response =
 					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
@@ -282,14 +283,14 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 				break;
 			}
 		}
-		// No final das tentativas, verifica se o batch foi acordado. Caso não, encerra o fluxo de envio.
+		// No final das tentativas, verifica se o batch foi acordado. Caso menos de 2f+1 processos tenham acordado o batch, encerra o fluxo de envio.
 		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
-		if (!verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) || verifyMessageAckedURB(&members)) {
+		if (!verifyBatchAckedFaulty(&membersAcks, batchSize, batchStart, totalDatagrams) || verifyMessageAckedURB(&members)) {
 			break;
 		}
 	}
 	close(transientSocketFd.first);
-	return broadcastType == BEB ? verifyMessageAckedBEB(&members) : verifyMessageAckedURB(&members);
+	return broadcastType == BEB ? verifyMessageAckedBEB(&members) : verifyMessageAckedFaultyURB(&members);
 }
 
 void MessageSender::removeFailed(
@@ -347,6 +348,16 @@ bool MessageSender::verifyMessageAckedURB(std::map<std::pair<unsigned int, unsig
 	return true;
 }
 
+bool MessageSender::verifyMessageAckedFaultyURB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks) {
+	unsigned long acked = 0;
+	for (auto &&member : *membersAcks) {
+		if (member.second)
+			acked++;
+	}
+	const auto f = membersAcks->size() - acked;
+	return acked >= membersAcks->size() * f + 1;
+}
+
 bool MessageSender::verifyMessageAckedBEB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks) {
 	unsigned short totalSYNACK = 0;
 	for (auto &&member : *membersAcks) {
@@ -373,6 +384,28 @@ bool MessageSender::verifyBatchAcked(
 		}
 	}
 	return true;
+}
+
+ bool MessageSender::verifyBatchAckedFaulty(
+	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
+	unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams) {
+	unsigned long batchAckedMembers = 0;
+	unsigned short batchStart = batchSize * batchIndex, batchEnd = (batchSize * batchIndex) + batchSize;
+	for (int i = batchStart; i < batchEnd; ++i) {
+		if (i >= totalDatagrams) {
+			break;
+		}
+		for (auto &&member : *membersAcks) {
+			for (auto &&[ack, response] : member.second) {
+				if (!response.first)
+					break;
+			}
+			batchAckedMembers++;
+		}
+	}
+	auto f = membersAcks->size() - batchAckedMembers;
+	return batchAckedMembers >= membersAcks->size() * f + 1;
+
 }
 
 unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength) {
@@ -417,7 +450,7 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 	auto buff = std::vector<unsigned char>(1048);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
-		// Consensusb
+		// Consensus
 		if (broadcastType == AB && members->size() > configMap->size() / 2) {
 			return true;
 		}
@@ -430,6 +463,9 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 			continue;
 		}
 		while (true) {
+			// TODO: Utilizar os processos vivos!
+			// TODO: Trazer a informação de processos vivos do receiver para RB
+			// TODO: Todos os 2*f + 1 utilizaram os processos vivos.
 			if (members->size() == configMap->size()) {
 				return true;
 			}
@@ -450,5 +486,8 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 			}
 		}
 	}
-	return members->size() == configMap->size();
+	// Diferença entre tamanho do grupo e tamanho de SYN-ACKS
+	const unsigned long f = configMap->size() - members->size();
+	// Para um processo falho, deve-se ter 3 processos corretos respondendo.
+	return members->size() >= 2 * f + 1;
 }

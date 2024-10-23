@@ -14,10 +14,12 @@ Message::Message(unsigned short totalDatagrams) {
 Message::~Message() { delete data; }
 
 bool Message::allACK() {
+	unsigned long finAcks = 0;
 	for (const auto ack : acks | std::views::values)
-		if (!ack)
-			return false;
-	return true;
+		if (ack)
+			finAcks++;
+	const unsigned int f = acks.size() - finAcks;
+	return finAcks >= 2 * f + 1;
 }
 
 
@@ -25,8 +27,6 @@ std::shared_mutex *Message::getMutex() { return &messageMutex; }
 
 // Adds data to the message. Returns true if ended the receive.
 bool Message::addData(Datagram *datagram) {
-		// if (datagram->getVersion() <= lastVersionReceived)
-		// 	return false;
 	if (sent || delivered)
 		return true;
 	if (versions[datagram->getVersion()])

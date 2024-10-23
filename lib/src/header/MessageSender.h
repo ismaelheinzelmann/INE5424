@@ -34,9 +34,13 @@ private:
 	BroadcastType broadcastType;
 	std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	bool verifyMessageAckedURB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);
+	bool verifyMessageAckedFaultyURB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);
 	bool verifyMessageAckedBEB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);
 	static bool verifyMessageAcked(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);
 	static bool verifyBatchAcked(
+		std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
+		unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams);
+	static bool verifyBatchAckedFaulty(
 		std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
 		unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams);
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);

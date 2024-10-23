@@ -79,6 +79,18 @@ void MessageReceiver::heartbeat() {
 		{
 			sendHEARTBEAT({channelMessageIP, channelMessagePort}, broadcastFD);
 			std::this_thread::sleep_for(std::chrono::seconds(1));
+			std::vector<std::pair<unsigned int, unsigned short>> removes;
+			for (auto [identifier, time] : heartbeatsTimes) {
+				if (std::chrono::system_clock::now() - time >= std::chrono::seconds(3)) {
+					removes.emplace_back(identifier);
+				}
+			}
+			for (auto identifier : removes) {
+				if (heartbeats.count(identifier))
+					heartbeats.erase(identifier);
+				if (heartbeatsTimes.count(identifier))
+					heartbeatsTimes.erase(identifier);
+			}
 		}
 	}
 }
@@ -147,9 +159,10 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	Protocol::setBroadcast(request);
 	Datagram *datagram = request->datagram;
 	if (datagram->isHEARTBEAT()) {
+		std::pair identifier = {datagram->getSourceAddress(), datagram->getSourcePort()};
 		std::unique_lock hblock(heartbeatsLock);
-		heartbeats[{datagram->getSourceAddress(), datagram->getSourcePort()}] = {datagram->getDestinAddress(),
-																				 datagram->getDestinationPort()};
+		heartbeats[identifier] = {datagram->getDestinAddress(), datagram->getDestinationPort()};
+		heartbeatsTimes[identifier] = std::chrono::system_clock::now();
 		return;
 	}
 
