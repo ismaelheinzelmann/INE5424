@@ -30,6 +30,7 @@ public:
 	void handleMessage(Request *request, int socketfd);
 	void handleBroadcastMessage(Request *request, int socketfd);
 	std::pair<unsigned int, unsigned short> verifyConsensus();
+	void createMessage(Request *request, bool broadcast);
 
 private:
 	std::map<std::pair<in_addr_t, in_port_t>, Message *> messages;

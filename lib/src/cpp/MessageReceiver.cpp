@@ -75,7 +75,7 @@ void MessageReceiver::cleanse() {
 }
 
 void MessageReceiver::heartbeat() {
-	while (running){
+	while (running) {
 		{
 			sendHEARTBEAT({channelMessageIP, channelMessagePort}, broadcastFD);
 			std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -148,21 +148,42 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	Datagram *datagram = request->datagram;
 	if (datagram->isHEARTBEAT()) {
 		std::unique_lock hblock(heartbeatsLock);
-		heartbeats[{datagram->getSourceAddress(), datagram->getSourcePort()}] = {datagram->getDestinAddress(), datagram->getDestinationPort()};
+		heartbeats[{datagram->getSourceAddress(), datagram->getSourcePort()}] = {datagram->getDestinAddress(),
+																				 datagram->getDestinationPort()};
+		return;
 	}
+
+	// Se não tiver esperando mensagem, aceita e informa HEARTBEAT
+	// Se estiver esperando, verifica se a mensagem é a esperada
+	//		Se for a esperada, continua
+	//		Se não for a esperada, verifique o consenso. Se o consenso é igual ela ou o consenso é 0, continua
+	//			Se não, retorna
+
+	// Não possui nenhuma mensagem esperada
 	if (broadcastType == AB) {
-		std::pair id = {request->datagram->getDestinAddress(), request->datagram->getDestinationPort()};
-		// PROBLEMA DEVE TA AQ EM BAIXO
-		if (channelOccupied && channelMessageIP != id.first && channelMessagePort != id.second
-			&& (channelMessageIP != 0 && channelMessagePort != 0)) {
-			std::pair<unsigned int, unsigned short> identifier = {channelMessageIP, channelMessagePort};
-			if (!messages[identifier]->delivered) {
-				return;
-			}
-			std::pair consent = verifyConsensus();
-			if (messages.contains(consent)) {
-				if (!messages[consent]->delivered) {
-					return;
+		// Cria uma mensagem mesmo que não vá ser utilizada para posterior consenso
+		if (datagram->getFlags() == 2) {
+			createMessage(request, socketfd);
+		}
+		// Caso haja alguma mensagem esperada
+		if (channelOccupied) {
+			std::pair messageID = {request->datagram->getDestinAddress(), request->datagram->getDestinationPort()};
+			// Se a mensagem recebida for diferente da esperada
+			if (channelMessageIP != messageID.first || channelMessagePort != messageID.second) {
+				std::pair<unsigned int, unsigned short> channelMessageID = {channelMessageIP, channelMessagePort};
+				std::pair consent = verifyConsensus();
+				// Consenso espera alguma coisa
+				if ((consent.first != 0 || consent.second != 0) &&
+					(consent.first != channelMessageID.first || consent.second != channelMessageID.second)) {
+					if (messages.contains(consent)) {
+						std::shared_lock messageLock(*messages[consent]->getMutex());
+						if (!messages[consent]->delivered &&
+							messages[consent]->getLastUpdate() - std::chrono::system_clock::now() >
+								std::chrono::seconds(3)) {
+							channelMessageIP = consent.first;
+							channelMessagePort = consent.second;
+						}
+					}
 				}
 			}
 		}
@@ -206,33 +227,38 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 std::pair<unsigned int, unsigned short> MessageReceiver::verifyConsensus() {
 	std::map<std::pair<in_addr_t, in_port_t>, int> countMap;
 
-	// Iterate over the heartbeats map to populate the countMap
 	for (const auto &entry : heartbeats) {
-		countMap[entry.second]++; // Increment count for each value
+		countMap[entry.second]++;
 	}
 
-	// Move the values and counts into a vector for sorting
 	std::vector<std::pair<std::pair<in_addr_t, in_port_t>, int>> sortedCounts(countMap.begin(), countMap.end());
 
-	// Sort the vector: first by count (descending), then by IP (ascending), and finally by port (ascending)
 	std::sort(sortedCounts.begin(), sortedCounts.end(), [](const auto &a, const auto &b) {
 		if (a.second != b.second) {
-			return a.second > b.second; // Sort by count, descending
+			return a.second > b.second;
 		}
 		if (a.first.first != b.first.first) {
-			return a.first.first < b.first.first; // Sort by IP, ascending
+			return a.first.first < b.first.first;
 		}
-		return a.first.second < b.first.second; // Sort by port, ascending
+		return a.first.second < b.first.second;
 	});
 	if (!sortedCounts.empty()) {
 		const auto &result = sortedCounts.front().first;
-		return {result.first, result.second}; // Return the IP and port pair
+		return {result.first, result.second};
 	}
 
-	// Return default values if the heartbeats map is empty
 	return {0, 0};
 }
 
+void MessageReceiver::createMessage(Request *request, bool broadcast) {
+	if (!messages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()})) {
+		auto *message = new Message(request->datagram->getDatagramTotal());
+		if (broadcast) {
+			message->broadcastMessage = true;
+		}
+		messages[{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}] = message;
+	}
+}
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool broadcast) {
 	if (broadcast && broadcastType == AB) {
 		channelMessageIP = request->datagram->getDestinAddress();
@@ -240,14 +266,7 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 		sendHEARTBEAT({channelMessageIP, channelMessagePort}, socketfd);
 		channelOccupied = true;
 	}
-	if (messages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()})) {
-		sendDatagramSYNACK(request, socketfd);
-	}
-	auto *message = new Message(request->datagram->getDatagramTotal());
-	if (broadcast) {
-		message->broadcastMessage = true;
-	}
-	messages[{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}] = message;
+	createMessage(request, broadcast);
 	sendDatagramSYNACK(request, socketfd);
 }
 
@@ -258,7 +277,7 @@ void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 			return;
 		channelOccupied = false;
 		message->delivered = true;
-		sendHEARTBEAT({0,0}, broadcastfd);
+		sendHEARTBEAT({0, 0}, broadcastfd);
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;
 	case URB:
