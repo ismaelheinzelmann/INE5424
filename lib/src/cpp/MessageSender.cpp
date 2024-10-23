@@ -19,7 +19,7 @@
 #define RETRY_ACK_ATTEMPT 3
 #define RETRY_ACK_TIMEOUT_USEC 200
 
-#define RETRY_DATA_ATTEMPT 6
+#define RETRY_DATA_ATTEMPT 4
 #define RETRY_DATA_TIMEOUT_USEC 100
 #define RETRY_DATA_TIMEOUT_USEC_MAX 800
 #define TIMEOUT_INCREMENT 200
@@ -247,6 +247,10 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 						   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
+				// Batch acordado, procede para o proximo batch
+				if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams)) {
+					break;
+				}
 				// Todos responderam FINACK
 				if (verifyMessageAckedURB(&members)) {
 					close(transientSocketFd.first);
@@ -277,10 +281,6 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					if (members.contains(identifier))
 						members[identifier] = true;
 				}
-			}
-			// Batch acordado, procede para o proximo batch
-			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams)) {
-				break;
 			}
 		}
 		// No final das tentativas, verifica se o batch foi acordado. Caso menos de 2f+1 processos tenham acordado o batch, encerra o fluxo de envio.
@@ -463,9 +463,6 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 			continue;
 		}
 		while (true) {
-			// TODO: Utilizar os processos vivos!
-			// TODO: Trazer a informação de processos vivos do receiver para RB
-			// TODO: Todos os 2*f + 1 utilizaram os processos vivos.
 			if (members->size() == configMap->size()) {
 				return true;
 			}
