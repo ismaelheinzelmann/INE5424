@@ -116,7 +116,7 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 		(request->datagram->isFIN() && request->datagram->isACK()) || request->datagram->isACK() ||
 		request->datagram->isFIN()) {
 		datagramController->insertDatagram(
-			{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}, request->datagram);
+			{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}, request->datagram);
 		return;
 	}
 	if (request->datagram->isSYN()) {
@@ -137,7 +137,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 		heartbeats[{datagram->getSourceAddress(), datagram->getSourcePort()}] = {datagram->getDestinAddress(), datagram->getDestinationPort()};
 	}
 	if (broadcastType == AB) {
-		std::pair id = {request->datagram->getSourceAddress(), request->datagram->getDestinationPort()};
+		std::pair id = {request->datagram->getDestinAddress(), request->datagram->getDestinationPort()};
 		// PROBLEMA DEVE TA AQ EM BAIXO
 		if (channelOccupied && channelMessageIP != id.first && channelMessagePort != id.second
 			&& (channelMessageIP != 0 && channelMessagePort != 0)) {
@@ -181,7 +181,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 				}
 			}
 		}
-		datagramController->insertDatagram({datagram->getSourceAddress(), datagram->getDestinationPort()}, datagram);
+		datagramController->insertDatagram({datagram->getDestinAddress(), datagram->getDestinationPort()}, datagram);
 		return;
 	}
 	if (datagram->isSYN()) {
@@ -221,19 +221,19 @@ std::pair<unsigned int, unsigned short> MessageReceiver::verifyConsensus() {
 
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool broadcast) {
 	if (broadcast && broadcastType == AB) {
-		channelMessageIP = request->datagram->getSourceAddress();
+		channelMessageIP = request->datagram->getDestinAddress();
 		channelMessagePort = request->datagram->getDestinationPort();
 		sendHEARTBEAT({channelMessageIP, channelMessagePort}, socketfd);
 		channelOccupied = true;
 	}
-	if (messages.contains({request->datagram->getSourceAddress(), request->datagram->getDestinationPort()})) {
+	if (messages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()})) {
 		sendDatagramSYNACK(request, socketfd);
 	}
 	auto *message = new Message(request->datagram->getDatagramTotal());
 	if (broadcast) {
 		message->broadcastMessage = true;
 	}
-	messages[{request->datagram->getSourceAddress(), request->datagram->getDestinationPort()}] = message;
+	messages[{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}] = message;
 	sendDatagramSYNACK(request, socketfd);
 }
 
@@ -288,7 +288,7 @@ void MessageReceiver::handleBroadcastDataMessage(Request *request, int socketfd)
 // Should be used with read lock.
 Message *MessageReceiver::getMessage(Datagram *datagram) {
 
-	std::pair identifier = {datagram->getSourceAddress(), datagram->getDestinationPort()};
+	std::pair identifier = {datagram->getDestinAddress(), datagram->getDestinationPort()};
 	if (messages.find(identifier) == messages.end()) {
 		return nullptr;
 	}

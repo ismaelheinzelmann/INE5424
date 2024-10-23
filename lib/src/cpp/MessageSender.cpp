@@ -44,6 +44,7 @@ void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *data
 		versionDatagram.setSourceAddress(configAddr.sin_addr.s_addr);
 		versionDatagram.setSourcePort(configAddr.sin_port);
 		versionDatagram.setDestinationPort(transientPort);
+		versionDatagram.setDestinAddress(configAddr.sin_addr.s_addr);
 		versionDatagram.setVersion(i + 1);
 		versionDatagram.setDatagramTotal(totalDatagrams);
 		for (unsigned short j = 0; j < 1024; j++) {
@@ -72,6 +73,7 @@ void MessageSender::buildBroadcastDatagrams(
 		versionDatagram.setSourceAddress(configAddr.sin_addr.s_addr);
 		versionDatagram.setSourcePort(configAddr.sin_port);
 		versionDatagram.setDestinationPort(transientPort);
+		versionDatagram.setDestinAddress(configAddr.sin_addr.s_addr);
 		versionDatagram.setVersion(i + 1);
 		versionDatagram.setDatagramTotal(totalDatagrams);
 		for (unsigned short j = 0; j < 1024; j++) {
@@ -100,6 +102,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	datagram.setSourceAddress(configAddr.sin_addr.s_addr);
 	datagram.setSourcePort(configAddr.sin_port);
 	datagram.setDestinationPort(transientSocketFd.second.sin_port);
+	datagram.setDestinAddress(configAddr.sin_addr.s_addr);
 	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
 
 	bool accepted = ackAttempts(destin, &datagram);
@@ -194,6 +197,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	datagram.setSourceAddress(configAddr.sin_addr.s_addr);
 	datagram.setSourcePort(configAddr.sin_port);
 	datagram.setDestinationPort(transientSocketFd.second.sin_port);
+	datagram.setDestinAddress(configAddr.sin_addr.s_addr);
 
 	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
 
