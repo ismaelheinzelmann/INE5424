@@ -12,15 +12,18 @@
 
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 								 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-								 unsigned short id, const BroadcastType &broadcastType) {
+								 unsigned short id, const BroadcastType &broadcastType, int broadcastFD) {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
 	this->datagramController = datagramController;
 	cleanseThread = std::thread([this] { cleanse(); });
 	cleanseThread.detach();
+	heartbeatThread = std::thread([this] { heartbeat(); });
+	heartbeatThread.detach();
 	this->configs = configs;
 	this->id = id;
 	this->broadcastType = broadcastType;
+	this->broadcastFD = broadcastFD;
 }
 
 MessageReceiver::~MessageReceiver() {
@@ -33,6 +36,8 @@ MessageReceiver::~MessageReceiver() {
 	cv.notify_all();
 	if (cleanseThread.joinable())
 		cleanseThread.join();
+	if (heartbeatThread.joinable())
+		heartbeatThread.join();
 	std::lock_guard messagesLock(messagesMutex);
 	for (auto it = this->messages.begin(); it != this->messages.end();) {
 		auto &[pair, message] = *it;
@@ -65,6 +70,15 @@ void MessageReceiver::cleanse() {
 				this->messages.erase(identifier);
 				datagramController->deleteQueue(identifier);
 			}
+		}
+	}
+}
+
+void MessageReceiver::heartbeat() {
+	while (running){
+		{
+			sendHEARTBEAT({channelMessageIP, channelMessagePort}, broadcastFD);
+			std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
 	}
 }

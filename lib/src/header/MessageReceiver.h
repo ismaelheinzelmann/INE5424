@@ -24,7 +24,7 @@ class MessageReceiver {
 public:
 	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 					DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-					unsigned short id, const BroadcastType &broadcastType);
+					unsigned short id, const BroadcastType &broadcastType, int broadcastFD);
 	~MessageReceiver();
 	void stop();
 	void handleMessage(Request *request, int socketfd);
@@ -36,8 +36,11 @@ private:
 	std::shared_mutex messagesMutex;
 	BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue;
 	std::thread cleanseThread;
+	std::thread heartbeatThread;
+
 	DatagramController *datagramController;
 	unsigned short id;
+	int broadcastFD;
 
 	// Atomic
 	std::atomic_bool channelOccupied;
@@ -65,6 +68,7 @@ private:
 	bool sendDatagramFINACK(Request *request, int socketfd);
 	bool sendDatagramFIN(Request *request, int socketfd);
 	void cleanse();
+	void heartbeat();
 };
 
 
