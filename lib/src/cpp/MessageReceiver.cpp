@@ -166,7 +166,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 		return;
 	}
 
-	// Se não tiver esperando mensagem, aceita e informa HEARTBEAT
+	// Se não tiver esperando mensagem, aceita
 	// Se estiver esperando, verifica se a mensagem é a esperada
 	//		Se for a esperada, continua
 	//		Se não for a esperada, verifique o consenso. Se o consenso é igual ela ou o consenso é 0, continua
@@ -190,11 +190,15 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 					(consent.first != channelMessageID.first || consent.second != channelMessageID.second)) {
 					if (messages.contains(consent)) {
 						std::shared_lock messageLock(*messages[consent]->getMutex());
+						// Mensagem anterior não foi finalizada e recebeu um timeout, logo substitui a mensagem aceita.
 						if (!messages[consent]->delivered &&
 							messages[consent]->getLastUpdate() - std::chrono::system_clock::now() >
 								std::chrono::seconds(3)) {
 							channelMessageIP = consent.first;
 							channelMessagePort = consent.second;
+						} else {
+							// Mensagem anterior não foi finalizada, porém ainda não tomou timeout
+							return;
 						}
 					}
 				}
