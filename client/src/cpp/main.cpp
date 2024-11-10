@@ -70,6 +70,7 @@ int main(int argc, char *argv[])
 		}
 		else if (type == "2")
 		{
+			// std::cout << "Faults percentage: drop = " << rb.getFaults().first << " corrupt = " << rb.getFaults().second << std::endl;
 			for (int i = 0; i < 5;i++) {
 
 				std::string message = "NODE: " + std::to_string(id) + " MESSAGE: " + std::to_string(i);

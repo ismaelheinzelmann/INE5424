@@ -24,6 +24,7 @@ public:
 	bool send(unsigned short id, std::vector<unsigned char> &data);
 	bool sendBroadcast(std::vector<unsigned char> &data);
 	BroadcastType getBroadcastType() const;
+	std::pair<int, int> getFaults() const;
 	void stop();
 	void listen();
 	// If false, RC stoppend listen
@@ -38,6 +39,7 @@ private:
 	MessageSender* sender;
 	std::map<unsigned short, sockaddr_in> configMap;
 	BroadcastType broadcastType;
+	std::pair<int, int> faults;
 	BlockingQueue<std::pair<bool,std::vector<unsigned char>>> messageQueue;
 	DatagramController datagramController;
 

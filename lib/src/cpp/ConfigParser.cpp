@@ -111,3 +111,35 @@ BroadcastType ConfigParser::parseBroadcast(const std::string &configFilePath)
 	}
     return BEB;
 }
+
+std::pair<int, int> ConfigParser::parseFaults(const std::string &configFilePath) {
+	const std::string cleanFileString = cleanFile(configFilePath);
+	const std::string searchOption = "faults";
+	const size_t faultsStartPos = cleanFileString.find(searchOption) + searchOption.length();
+	const size_t start = cleanFileString.find("{{", faultsStartPos) + 2;
+	const size_t end = cleanFileString.find("}}", start);
+
+	// Extracting the substring with drop and corrupt settings
+	std::string faultsSubstr = cleanFileString.substr(start, end - start);
+
+	// Variables to store drop and corrupt values
+	int drop = 0, corrupt = 0;
+
+	// Finding drop value
+	const size_t dropPos = faultsSubstr.find("drop=");
+	if (dropPos != std::string::npos) {
+		const size_t dropStart = dropPos + 5;
+		const size_t dropEnd = faultsSubstr.find("}", dropStart);
+		drop = std::stoi(faultsSubstr.substr(dropStart, dropEnd - dropStart));
+	}
+
+	// Finding corrupt value
+	const size_t corruptPos = faultsSubstr.find("corrupt=");
+	if (corruptPos != std::string::npos) {
+		const size_t corruptStart = corruptPos + 8;
+		const size_t corruptEnd = faultsSubstr.find("}", corruptStart);
+		corrupt = std::stoi(faultsSubstr.substr(corruptStart, corruptEnd - corruptStart));
+	}
+
+	return {drop, corrupt};
+}

@@ -27,6 +27,7 @@
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID) {
 	this->configMap = ConfigParser::parseNodes(configFilePath);
 	this->broadcastType = ConfigParser::parseBroadcast(configFilePath);
+	this->faults = ConfigParser::parseFaults(configFilePath);
 	this->id = nodeID;
 	if (this->configMap.find(id) == this->configMap.end()) {
 		throw std::runtime_error("Invalid ID.");
@@ -187,6 +188,11 @@ void ReliableCommunication::printNodes(std::mutex *printLock) const {
 BroadcastType ReliableCommunication::getBroadcastType() const
 {
 	return this->broadcastType;
+}
+
+std::pair<int, int> ReliableCommunication::getFaults() const
+{
+	return this->faults;
 }
 
 
