@@ -119,7 +119,7 @@ void ReliableCommunication::processDatagram() {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
-		if (!Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer)) {
+		if (!Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer, faults.first, faults.second)) {
 			continue;
 		}
 		if (!verifyOrigin(&datagram)) {
@@ -143,7 +143,7 @@ void ReliableCommunication::processBroadcastDatagram() {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
-		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer)) {
+		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer, faults.first, faults.second)) {
 			continue;
 		}
 		if (!verifyOriginBroadcast(datagram.getSourcePort()))

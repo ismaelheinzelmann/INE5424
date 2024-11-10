@@ -35,11 +35,12 @@ LIB_SOURCES := $(wildcard $(LIB_CPP_DIR)/*.cpp)
 LIB_OBJECTS := $(patsubst $(LIB_CPP_DIR)/%.cpp,$(LIB_OBJ_DIR)/%.o,$(LIB_SOURCES))
 
 # Client Sources and Objects
-CLIENT_SOURCES := $(wildcard $(CLIENT_CPP_DIR)/*.cpp)
+CLIENT_SOURCES := $(wildcard $(CLIENT_CPP_DIR)/main.cpp)
 CLIENT_OBJECTS := $(patsubst $(CLIENT_CPP_DIR)/%.cpp,$(CLIENT_OBJ_DIR)/%.o,$(CLIENT_SOURCES))
 
 # Targets
 TARGET := $(CLIENT_BIN_DIR)/client
+TEST_TARGET := $(CLIENT_BIN_DIR)/test
 
 # Default target
 all: .directories $(TARGET)
@@ -47,6 +48,17 @@ all: .directories $(TARGET)
 # Build target
 $(TARGET): $(CLIENT_OBJECTS) $(LIB_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(CLIENT_OBJECTS) $(LIB_OBJECTS) -o $(TARGET)
+
+# Test target
+test: .directories $(TEST_TARGET)
+
+$(TEST_TARGET): $(CLIENT_OBJ_DIR)/test.o $(LIB_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(CLIENT_OBJ_DIR)/test.o $(LIB_OBJECTS) -o $(TEST_TARGET)
+
+# Build object files for test source
+$(CLIENT_OBJ_DIR)/test.o: $(CLIENT_CPP_DIR)/test.cpp
+	@mkdir -p $(CLIENT_OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -I$(CLIENT_HEADER_DIR) -c $< -o $@
 
 # Build target with debugging information
 .debug: CXXFLAGS := $(CXXFLAGS_DEBUG)
@@ -57,7 +69,7 @@ $(LIB_OBJ_DIR)/%.o: $(LIB_CPP_DIR)/%.cpp
 	@mkdir -p $(LIB_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -I$(LIB_HEADER_DIR) -c $< -o $@
 
-# Build object files from send source
+# Build object files from client source
 $(CLIENT_OBJ_DIR)/%.o: $(CLIENT_CPP_DIR)/%.cpp
 	@mkdir -p $(CLIENT_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -I$(CLIENT_HEADER_DIR) -c $< -o $@
@@ -68,4 +80,4 @@ $(CLIENT_OBJ_DIR)/%.o: $(CLIENT_CPP_DIR)/%.cpp
 
 # Clean target
 .clean:
-	rm -rf $(CLIENT_OBJ_DIR) $(CLIENT_BIN_DIR) $(LIB_OBJ_DIR) $(TARGET)
+	rm -rf $(CLIENT_OBJ_DIR) $(CLIENT_BIN_DIR) $(LIB_OBJ_DIR) $(TARGET) $(TEST_TARGET)

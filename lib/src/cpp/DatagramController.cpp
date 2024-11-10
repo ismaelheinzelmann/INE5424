@@ -41,7 +41,7 @@ Datagram *DatagramController::getDatagramTimeout(const std::pair<unsigned int, u
 	std::signal(SIGALRM, signalHandler);
 	waitingTimeout.store(true);
 	pthread_sigmask(SIG_UNBLOCK, &newmask, nullptr);
-	ualarm(std::min(timeoutMS * 1000, 1000000), 0);
+	ualarm(timeoutMS*1000, 0);
 	Datagram *datagram = datagrams.at(identifier)->pop();
 	pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
 	waitingTimeout.store(false);

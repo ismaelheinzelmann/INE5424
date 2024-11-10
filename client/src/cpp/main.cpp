@@ -19,9 +19,7 @@ void print(ReliableCommunication &rb)
 		if (!receivedMessage.first) break;
 		{
 			std::lock_guard guard(g_lock);
-			std::cout << "Received message: " << receivedMessage.second.size() << " bytes of size" << std::endl;
 			std::string str(receivedMessage.second.begin(), receivedMessage.second.end());
-			std::cout<<str<<std::endl;
 			std::cout << "Message content: " << str << std::endl;
 		}
 	}
@@ -56,33 +54,36 @@ int main(int argc, char *argv[])
 			rb.printNodes(&g_lock);
 			std::cout << "Choose which node you want to send the message:" << std::endl;
 			std::cin >> idString;
-			for (int i = 0; i < 100;i++) {
-
-				std::string message = "NODE: " + std::to_string(id) + " MESSAGE: " + std::to_string(i);
-				std::vector<unsigned char> messageBytes(message.begin(), message.end());
-				rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes);
-			}
-			// std::cin.ignore(); // Remove this if necessary
-			// std::string message = std::string();
-			// std::cout << "Write the message:" << std::endl;
-			// std::getline(std::cin, message);
-			// std::vector<unsigned char> messageBytes(message.begin(), message.end());
-			// auto before = std::chrono::system_clock::now();
-			// std::string resp = rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes)
-			// 					? "Message sent successfully."
-			// 					: "Failed sending message.";
-			// Logger::log("Time spent: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - before).count()) + "ms", LogLevel::INFO);
-			// std::cout << resp << std::endl;
+			std::cin.ignore(); // Remove this if necessary
+			std::string message = std::string();
+			std::cout << "Write the message:" << std::endl;
+			std::getline(std::cin, message);
+			std::vector<unsigned char> messageBytes(message.begin(), message.end());
+			auto before = std::chrono::system_clock::now();
+			std::string resp = rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes)
+								? "Message sent successfully."
+								: "Failed sending message.";
+			Logger::log("Time spent: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - before).count()) + "ms", LogLevel::INFO);
+			std::cout << resp << std::endl;
 		}
 		else if (type == "2")
 		{
-			// std::cout << "Faults percentage: drop = " << rb.getFaults().first << " corrupt = " << rb.getFaults().second << std::endl;
-			for (int i = 0; i < 5;i++) {
-
-				std::string message = "NODE: " + std::to_string(id) + " MESSAGE: " + std::to_string(i);
+			int success = 0;
+			for (int i = 0; i < 100; i++) {
+				std::string message = "Node: " + std::to_string(strtol(argv[1], nullptr, 10)) + " | Message: " + std::to_string(i);
 				std::vector<unsigned char> messageBytes(message.begin(), message.end());
-				rb.sendBroadcast(messageBytes);
+				bool sent = rb.sendBroadcast(messageBytes);
+				if (sent)
+					success++;
 			}
+			std::cout << "Success in " + std::to_string(success) + " of 100 messages." << std::endl;
+			std::cout<< "Messages contents:"<<std::endl;
+			for (int i = 0; i < success; i++) {
+				auto receivedMessage = rb.receive();
+				std::string str(receivedMessage.second.begin(), receivedMessage.second.end());
+				std::cout<<str<<std::endl;
+			}
+
 			// std::string bcType = BroadcastTypeToString(rb.getBroadcastType());
 			// std::cout << "Broadcast type: " << bcType << std::endl;
 			// std::cin.ignore(); // Remove this if necessary

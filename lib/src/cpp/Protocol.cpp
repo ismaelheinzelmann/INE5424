@@ -11,8 +11,6 @@
 #include "FaultInjector.h"
 
 #include "../header/Flags.h"
-#define RANDOM_DROP 0
-#define RANDOM_CORRUPT 1
 // Serializes data and computes the checksum while doing so.
 std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	// TODO Refatorar
@@ -119,14 +117,14 @@ bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *se
 }
 
 bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr,
-								  std::vector<unsigned char> *buff) {
+								  std::vector<unsigned char> *buff, int dropChance, int corruptChance) {
 	socklen_t senderAddrLen = sizeof(senderAddr);
 	ssize_t bytes_received = recvfrom(socketfd, buff->data(), buff->size(), 0,
 									  reinterpret_cast<struct sockaddr *>(senderAddr), &senderAddrLen);
 	if (bytes_received < 0)
 		return false;
 	buff->resize(bytes_received);
-	if (generateFault(buff))
+	if (generateFault(buff, dropChance, corruptChance))
 		return false; // Package dropped
 
 	unsigned int checkSum = TypeUtils::buffToUnsignedInt(*buff, 20);
@@ -143,12 +141,12 @@ bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr
 }
 
 // Will return true if the packet should be dropped.
-bool Protocol::generateFault(std::vector<unsigned char>* data) {
-	if (FaultInjector::returnTrueByChance(RANDOM_DROP)) {
+bool Protocol::generateFault(std::vector<unsigned char>* data, int dropChance, int corruptChance) {
+	if (FaultInjector::returnTrueByChance(dropChance)) {
 		Logger::log("Packet received will be dropped and ignored.", LogLevel::FAULT);
 		return true;
 	}
-	if (FaultInjector::returnTrueByChance(RANDOM_CORRUPT)) {
+	if (FaultInjector::returnTrueByChance(corruptChance)) {
 		FaultInjector::corruptVector(data);
 	}
 	return false;

@@ -2,18 +2,18 @@
 
 #include <Logger.h>
 #include <random>
-bool FaultInjector::returnTrueByChance(int chance){
+bool FaultInjector::returnTrueByChance(int chance) {
 	if (chance < 0 || chance > 100) {
 		return false;
 	}
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> dis(0, 99);
+	std::uniform_int_distribution<> dis(1, 100);
 
 	int randomValue = dis(gen);
 
-	return randomValue < chance;
+	return randomValue <= chance;
 }
 
 void FaultInjector::corruptVector(std::vector<unsigned char>* data) {

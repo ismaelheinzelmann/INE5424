@@ -57,8 +57,7 @@ std::vector<unsigned char> *Message::getData() const { return data; }
 
 bool Message::verifyMessage(Datagram &datagram) const {
 	const unsigned short datagramVersion = datagram.getVersion();
-	// if (datagramVersion != this->lastVersionReceived && datagramVersion != lastVersionReceived + 1)
-	if (datagramVersion > totalDatagrams || datagramVersion < 1) {
+	if (datagramVersion > totalDatagrams) {
 		return false;
 	}
 	return true;

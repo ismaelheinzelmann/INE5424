@@ -314,7 +314,7 @@ void MessageReceiver::handleBroadcastDataMessage(Request *request, int socketfd)
 	}
 	std::shared_lock messageLock(*message->getMutex());
 
-	if (message->delivered) {
+	if (message->delivered|| message->sent) {
 		sendDatagramFINACK(request, socketfd);
 		return;
 	}
