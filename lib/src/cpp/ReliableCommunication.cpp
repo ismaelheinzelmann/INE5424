@@ -15,12 +15,14 @@
 #include "ConfigParser.h"
 #include "MessageSender.h"
 #include "Protocol.h"
+#include "FaultInjector.h"
 
 #include <arpa/inet.h>
 #include <cstring>
 #include <random>
 #include <thread>
-
+#define RANDOM_DROP 1
+#define RANDOM_CORRUPT 1
 #define PORT 8888
 // #define BROADCAST_ADDRESS "255.255.255.255"
 
@@ -97,19 +99,6 @@ void ReliableCommunication::stop() {
 	delete sender;
 }
 
-bool returnTrueWithProbability(int n) {
-	if (n < 0 || n > 100) {
-		throw std::invalid_argument("Probability must be between 0 and 100.");
-	}
-
-	std::random_device rd; // Get a random number from hardware
-	std::mt19937 gen(rd()); // Seed the generator
-	std::uniform_int_distribution<> dis(0, 99); // Distribution in range [0, 99]
-
-	int randomValue = dis(gen); // Generate a random number
-	return randomValue < n;
-}
-
 bool ReliableCommunication::send(const unsigned short id, std::vector<unsigned char> &data) {
 	if (this->configMap.find(id) == this->configMap.end())
 		return false;
@@ -139,16 +128,30 @@ void ReliableCommunication::processDatagram() {
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);
 			continue;
 		}
-		Logger::log("Datagram received.", LogLevel::DEBUG);
 		if (datagram.isEND() && datagram.getSourcePort() == this->configMap[id].sin_port &&
 			datagram.getSourceAddress() == this->configMap[id].sin_addr.s_addr) {
 			process = false;
 			return;
 		}
+		if (generateFault(datagram.getData()))
+			continue;
+		Logger::log("Datagram received.", LogLevel::DEBUG);
 		senderAddr.sin_family = AF_INET;
 		auto request = Request{&buffer, &senderAddr, &datagram};
 		handler->handleMessage(&request, this->socketInfo);
 	}
+}
+
+// Will return true if the packet should be dropped.
+bool ReliableCommunication::generateFault(std::vector<unsigned char>* data) {
+	if (FaultInjector::returnTrueByChance(RANDOM_DROP)) {
+		Logger::log("Packet received will be dropped and ignored.", LogLevel::FAULT);
+		return true;
+	}
+	if (FaultInjector::returnTrueByChance(RANDOM_CORRUPT)) {
+		FaultInjector::corruptVector(data);
+	}
+	return false;
 }
 
 void ReliableCommunication::processBroadcastDatagram() {
@@ -157,7 +160,8 @@ void ReliableCommunication::processBroadcastDatagram() {
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
 		Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer);
-		// Logger::log("Broadcast Received.", LogLevel::DEBUG);
+		if (generateFault(datagram.getData()))
+			continue;
 		buffer.resize(24 + datagram.getDataLength());
 		if (!verifyOriginBroadcast(datagram.getSourcePort()))
 		{

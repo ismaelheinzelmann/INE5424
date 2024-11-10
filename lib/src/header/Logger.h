@@ -7,11 +7,12 @@
 #include <iostream>
 #include <string>
 
-enum class LogLevel { INFO, DEBUG, WARNING, ERROR, FATAL, NONE };
+enum class LogLevel { INFO, FAULT ,DEBUG, WARNING, ERROR, FATAL, NONE };
 
 // ANSI color codes
 const std::string COLOR_RESET = "\033[0m";
-const std::string COLOR_INFO = "\033[32m"; // Green
+const std::string COLOR_INFO = "\033[32m";
+const std::string COLOR_FAULT = "\033[35m"; // Magenta// Green
 const std::string COLOR_DEBUG = "\033[36m"; // Cyan
 const std::string COLOR_WARNING = "\033[33m"; // Yellow
 const std::string COLOR_ERROR = "\033[31m"; // Red
@@ -53,6 +54,8 @@ private:
 		switch (level) {
 		case LogLevel::INFO:
 			return "INFO";
+		case LogLevel::FAULT:
+			return "FAULT";
 		case LogLevel::DEBUG:
 			return "DEBUG";
 		case LogLevel::WARNING:
@@ -70,6 +73,8 @@ private:
 		switch (level) {
 		case LogLevel::INFO:
 			return COLOR_INFO;
+		case LogLevel::FAULT:
+			return COLOR_FAULT;
 		case LogLevel::DEBUG:
 			return COLOR_DEBUG;
 		case LogLevel::WARNING:
@@ -86,6 +91,8 @@ private:
 	static LogLevel stringToLogLevel(const std::string &level_str) {
 		if (level_str == "INFO")
 			return LogLevel::INFO;
+		if (level_str == "FAULT")
+			return LogLevel::FAULT;
 		if (level_str == "DEBUG")
 			return LogLevel::DEBUG;
 		if (level_str == "WARNING")

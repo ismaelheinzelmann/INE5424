@@ -130,6 +130,7 @@ void MessageReceiver::handleDataMessage(Request *request, int socketfd) {
 void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	if (!verifyMessage(request)) {
+		Logger::log("Packet received is now corrupted and will not be responded.", LogLevel::FAULT);
 		return;
 	}
 
@@ -154,6 +155,7 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	std::shared_lock lock(messagesMutex);
 	if (!verifyMessage(request)) {
+		Logger::log("Packet received is corrupted and will not be responded.", LogLevel::FAULT);
 		return;
 	}
 	Protocol::setBroadcast(request);

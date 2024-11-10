@@ -49,6 +49,7 @@ private:
 	bool verifyOrigin(Datagram *datagram);
 	bool verifyOriginBroadcast(int requestSourcePort);
 	void processDatagram();
+	static bool generateFault(std::vector<unsigned char> *data);
 	void processBroadcastDatagram();
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);
