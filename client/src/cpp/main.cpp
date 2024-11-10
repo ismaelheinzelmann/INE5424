@@ -56,17 +56,23 @@ int main(int argc, char *argv[])
 			rb.printNodes(&g_lock);
 			std::cout << "Choose which node you want to send the message:" << std::endl;
 			std::cin >> idString;
-			std::cin.ignore(); // Remove this if necessary
-			std::string message = std::string();
-			std::cout << "Write the message:" << std::endl;
-			std::getline(std::cin, message);
-			std::vector<unsigned char> messageBytes(message.begin(), message.end());
-			auto before = std::chrono::system_clock::now();
-			std::string resp = rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes)
-								? "Message sent successfully."
-								: "Failed sending message.";
-			Logger::log("Time spent: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - before).count()) + "ms", LogLevel::INFO);
-			std::cout << resp << std::endl;
+			for (int i = 0; i < 100;i++) {
+
+				std::string message = "NODE: " + std::to_string(id) + " MESSAGE: " + std::to_string(i);
+				std::vector<unsigned char> messageBytes(message.begin(), message.end());
+				rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes);
+			}
+			// std::cin.ignore(); // Remove this if necessary
+			// std::string message = std::string();
+			// std::cout << "Write the message:" << std::endl;
+			// std::getline(std::cin, message);
+			// std::vector<unsigned char> messageBytes(message.begin(), message.end());
+			// auto before = std::chrono::system_clock::now();
+			// std::string resp = rb.send(static_cast<unsigned short>(strtol(idString.c_str(), nullptr, 10)), messageBytes)
+			// 					? "Message sent successfully."
+			// 					: "Failed sending message.";
+			// Logger::log("Time spent: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - before).count()) + "ms", LogLevel::INFO);
+			// std::cout << resp << std::endl;
 		}
 		else if (type == "2")
 		{

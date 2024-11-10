@@ -141,12 +141,13 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
 														   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt);
 				if (response == nullptr)
-					// Resposta de outro batch, pode ser descartada.
-					if (response->getVersion() - 1 < batchStart * batchSize ||
-						response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
-						Logger::log("Received old response.", LogLevel::DEBUG);
-						continue;
-					}
+					break;
+				// Resposta de outro batch, pode ser descartada.
+				if (response->getVersion() - 1 < batchStart * batchSize ||
+					response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
+					Logger::log("Received old response.", LogLevel::DEBUG);
+					continue;
+				}
 				// Armazena informação de ACK recebido.
 				if (response->getVersion() - 1 <= totalDatagrams && response->isACK() &&
 					!acknowledgments[response->getVersion() - 1]) {
@@ -283,9 +284,10 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 				}
 			}
 		}
-		// No final das tentativas, verifica se o batch foi acordado. Caso menos de 2f+1 processos tenham acordado o batch, encerra o fluxo de envio.
-		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
-		if (!verifyBatchAckedFaulty(&membersAcks, batchSize, batchStart, totalDatagrams) || verifyMessageAckedURB(&members)) {
+		// No final das tentativas, verifica se o batch foi acordado. Caso menos de 2f+1 processos tenham acordado o
+		// batch, encerra o fluxo de envio. Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
+		if (!verifyBatchAckedFaulty(&membersAcks, batchSize, batchStart, totalDatagrams) ||
+			verifyMessageAckedURB(&members)) {
 			break;
 		}
 	}
@@ -386,7 +388,7 @@ bool MessageSender::verifyBatchAcked(
 	return true;
 }
 
- bool MessageSender::verifyBatchAckedFaulty(
+bool MessageSender::verifyBatchAckedFaulty(
 	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
 	unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams) {
 	unsigned long batchAckedMembers = 0;
@@ -405,7 +407,6 @@ bool MessageSender::verifyBatchAcked(
 	}
 	auto f = membersAcks->size() - batchAckedMembers;
 	return batchAckedMembers >= membersAcks->size() * f + 1;
-
 }
 
 unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength) {

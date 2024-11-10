@@ -23,6 +23,7 @@ public:
 	static sockaddr_in broadcastAddress();
 	static bool readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr_in *senderAddr,
 								   std::vector<unsigned char> *buff);
+	static bool generateFault(std::vector<unsigned char> *data);
 	static bool sendACK(Datagram *datagram, sockaddr_in *to, int socketfd);
 	static bool sendSYN(Datagram *datagram, sockaddr_in *to, int socketfd);
 	static bool sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, Flags *flags);

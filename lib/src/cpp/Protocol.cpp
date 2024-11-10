@@ -6,11 +6,13 @@
 #include <future>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <thread>
 #include <vector>
 #include "TypeUtils.h"
+#include "FaultInjector.h"
 
 #include "../header/Flags.h"
+#define RANDOM_DROP 0
+#define RANDOM_CORRUPT 1
 // Serializes data and computes the checksum while doing so.
 std::vector<unsigned char> Protocol::serialize(Datagram *datagram) {
 	// TODO Refatorar
@@ -79,15 +81,6 @@ Datagram Protocol::deserialize(std::vector<unsigned char> &serializedDatagram) {
 	return datagram;
 }
 
-// Computes the checksum of a datagram, the checksum field will be zero while computing.
-unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDatagram) {
-	(*serializedDatagram)[20] = 0;
-	(*serializedDatagram)[21] = 0;
-	(*serializedDatagram)[22] = 0;
-	(*serializedDatagram)[23] = 0;
-	return sumChecksum32(serializedDatagram);
-}
-
 unsigned int Protocol::sumChecksum32(const std::vector<unsigned char> *data) {
 	unsigned int crc = 0xFFFFFFFF; // start
 	unsigned int polynomial = 0xEDB88320; // The polynomial for CRC-32 standard
@@ -109,7 +102,16 @@ unsigned int Protocol::sumChecksum32(const std::vector<unsigned char> *data) {
 	// invert the bits to get the final CRC
 	return crc ^ 0xFFFFFFFF;
 }
-// TODO Fix checksum
+
+// Computes the checksum of a datagram, the checksum field will be zero while computing.
+unsigned int Protocol::computeChecksum(std::vector<unsigned char> *serializedDatagram) {
+	(*serializedDatagram)[20] = 0;
+	(*serializedDatagram)[21] = 0;
+	(*serializedDatagram)[22] = 0;
+	(*serializedDatagram)[23] = 0;
+	return sumChecksum32(serializedDatagram);
+}
+
 bool Protocol::verifyChecksum(Datagram *datagram, std::vector<unsigned char> *serializedDatagram) {
 	auto dch = datagram->getChecksum();
 	auto cch = computeChecksum(serializedDatagram);
@@ -123,10 +125,33 @@ bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr
 									  reinterpret_cast<struct sockaddr *>(senderAddr), &senderAddrLen);
 	if (bytes_received < 0)
 		return false;
+	buff->resize(bytes_received);
+	if (generateFault(buff))
+		return false; // Package dropped
+
+	unsigned int checkSum = TypeUtils::buffToUnsignedInt(*buff, 20);
+	unsigned int computedCheckSum = computeChecksum(buff);
+	if (checkSum != computedCheckSum) {
+		Logger::log("Packet received is now corrupted and will not be responded.", LogLevel::FAULT);
+		// Package corrupted
+		return false;
+	}
 	bufferToDatagram(*datagramBuff, *buff);
 	const std::vector dataVec(buff->begin() + 24, buff->begin() + 24 + datagramBuff->getDataLength());
 	datagramBuff->setData(dataVec);
 	return true;
+}
+
+// Will return true if the packet should be dropped.
+bool Protocol::generateFault(std::vector<unsigned char>* data) {
+	if (FaultInjector::returnTrueByChance(RANDOM_DROP)) {
+		Logger::log("Packet received will be dropped and ignored.", LogLevel::FAULT);
+		return true;
+	}
+	if (FaultInjector::returnTrueByChance(RANDOM_CORRUPT)) {
+		FaultInjector::corruptVector(data);
+	}
+	return false;
 }
 
 void Protocol::bufferToDatagram(Datagram &datagramBuff, const std::vector<unsigned char> &bytesBuffer) {

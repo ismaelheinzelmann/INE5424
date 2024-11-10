@@ -15,14 +15,11 @@
 #include "ConfigParser.h"
 #include "MessageSender.h"
 #include "Protocol.h"
-#include "FaultInjector.h"
 
 #include <arpa/inet.h>
 #include <cstring>
 #include <random>
 #include <thread>
-#define RANDOM_DROP 1
-#define RANDOM_CORRUPT 1
 #define PORT 8888
 // #define BROADCAST_ADDRESS "255.255.255.255"
 
@@ -122,8 +119,9 @@ void ReliableCommunication::processDatagram() {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
-		Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer);
-		buffer.resize(24 + datagram.getDataLength());
+		if (!Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer)) {
+			continue;
+		}
 		if (!verifyOrigin(&datagram)) {
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);
 			continue;
@@ -133,8 +131,6 @@ void ReliableCommunication::processDatagram() {
 			process = false;
 			return;
 		}
-		if (generateFault(datagram.getData()))
-			continue;
 		Logger::log("Datagram received.", LogLevel::DEBUG);
 		senderAddr.sin_family = AF_INET;
 		auto request = Request{&buffer, &senderAddr, &datagram};
@@ -142,27 +138,14 @@ void ReliableCommunication::processDatagram() {
 	}
 }
 
-// Will return true if the packet should be dropped.
-bool ReliableCommunication::generateFault(std::vector<unsigned char>* data) {
-	if (FaultInjector::returnTrueByChance(RANDOM_DROP)) {
-		Logger::log("Packet received will be dropped and ignored.", LogLevel::FAULT);
-		return true;
-	}
-	if (FaultInjector::returnTrueByChance(RANDOM_CORRUPT)) {
-		FaultInjector::corruptVector(data);
-	}
-	return false;
-}
-
 void ReliableCommunication::processBroadcastDatagram() {
 	while (true) {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
-		Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer);
-		if (generateFault(datagram.getData()))
+		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer)) {
 			continue;
-		buffer.resize(24 + datagram.getDataLength());
+		}
 		if (!verifyOriginBroadcast(datagram.getSourcePort()))
 		{
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);

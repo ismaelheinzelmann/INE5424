@@ -1,4 +1,6 @@
 #include "../header/FaultInjector.h"
+
+#include <Logger.h>
 #include <random>
 bool FaultInjector::returnTrueByChance(int chance){
 	if (chance < 0 || chance > 100) {
@@ -31,4 +33,5 @@ void FaultInjector::corruptVector(std::vector<unsigned char>* data) {
         unsigned char corruptedValue = ~originalValue;
         (*data)[index] = corruptedValue;
     }
+	Logger::log("Corrupted.", LogLevel::DEBUG);
 }
