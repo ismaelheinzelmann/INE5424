@@ -80,12 +80,6 @@ int main(int argc, char *argv[])
 				}
 			}
 			std::cout << "Success in " + std::to_string(success) + " of 100 messages." << std::endl;
-			std::cout<< "Messages contents:"<<std::endl;
-			for (int i = 0; i < success; i++) {
-				auto receivedMessage = rb.receive();
-				std::string str(receivedMessage.second.begin(), receivedMessage.second.end());
-				std::cout<<str<<std::endl;
-			}
 
 			// std::string bcType = BroadcastTypeToString(rb.getBroadcastType());
 			// std::cout << "Broadcast type: " << bcType << std::endl;

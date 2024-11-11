@@ -463,9 +463,9 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
 		// Consensus
-		if (broadcastType == AB && members->size() > configMap->size() / 2) {
-			return true;
-		}
+		// if (broadcastType == AB && members->size() > configMap->size() / 2) {
+		// 	return true;
+		// }
 		if (members->size() == configMap->size()) {
 			break;
 		}

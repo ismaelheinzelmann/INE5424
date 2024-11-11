@@ -165,6 +165,11 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	//		Se for a esperada, continua
 	//		Se não for a esperada, verifique o consenso. Se o consenso é igual ela ou o consenso é 0, continua
 	//			Se não, retorna
+	Message *message = getMessage(request->datagram);
+	if (message != nullptr && message->delivered && request->datagram->getFlags() == 0) {
+		sendDatagramFINACK(request, socketfd);
+		return;
+	}
 
 	// Não possui nenhuma mensagem esperada
 	if (broadcastType == AB) {
@@ -188,6 +193,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 						if (!messages[consent]->delivered &&
 							messages[consent]->getLastUpdate() - std::chrono::system_clock::now() >
 								std::chrono::seconds(3)) {
+
 							channelMessageIP = consent.first;
 							channelMessagePort = consent.second;
 						} else {
@@ -199,6 +205,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 			}
 		}
 	}
+
 	// Data datagram
 	if (datagram->getFlags() == 0) {
 		handleBroadcastDataMessage(request, socketfd);
