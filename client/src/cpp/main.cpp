@@ -68,32 +68,19 @@ int main(int argc, char *argv[])
 		}
 		else if (type == "2")
 		{
-			int success = 0;
-			for (int i = 0; i < 100; i++) {
-				std::string message = "Node: " + std::to_string(strtol(argv[1], nullptr, 10)) + " | Message: " + std::to_string(i);
-				std::vector<unsigned char> messageBytes(message.begin(), message.end());
-				bool sent = rb.sendBroadcast(messageBytes);
-				if (sent) {
-					success++;
-				} else {
-					Logger::log("Message failed.", LogLevel::INFO);
-				}
-			}
-			std::cout << "Success in " + std::to_string(success) + " of 100 messages." << std::endl;
-
-			// std::string bcType = BroadcastTypeToString(rb.getBroadcastType());
-			// std::cout << "Broadcast type: " << bcType << std::endl;
-			// std::cin.ignore(); // Remove this if necessary
-			// std::string message = std::string();
-			// std::cout << "Write the message:" << std::endl;
-			// std::getline(std::cin, message);
-			// std::vector<unsigned char> messageBytes(message.begin(), message.end());
-			// auto before = std::chrono::system_clock::now();
-			// std::string resp = rb.sendBroadcast(messageBytes)
-			// 					? "Message sent successfully."
-			// 					: "Failed sending message.";
-			// Logger::log("Time spent: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - before).count()) + "ms", LogLevel::INFO);
-			// std::cout << resp << std::endl;
+			std::string bcType = BroadcastTypeToString(rb.getBroadcastType());
+			std::cout << "Broadcast type: " << bcType << std::endl;
+			std::cin.ignore(); // Remove this if necessary
+			std::string message = std::string();
+			std::cout << "Write the message:" << std::endl;
+			std::getline(std::cin, message);
+			std::vector<unsigned char> messageBytes(message.begin(), message.end());
+			auto before = std::chrono::system_clock::now();
+			std::string resp = rb.sendBroadcast(messageBytes)
+								? "Message sent successfully."
+								: "Failed sending message.";
+			Logger::log("Time spent: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - before).count()) + "ms", LogLevel::INFO);
+			std::cout << resp << std::endl;
 		}
 		else
 		{

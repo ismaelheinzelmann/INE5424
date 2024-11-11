@@ -267,10 +267,8 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					return true;
 				}
 				int timeoutMS = std::min(RETRY_ACK_TIMEOUT_USEC + 100 * attempt, 500);
-				Logger::log("Before timeout", LogLevel::DEBUG);
 				Datagram *response = datagramController->getDatagramTimeout(
 					{datagram.getSourceAddress(), datagram.getDestinationPort()}, timeoutMS);
-				Logger::log("After timeout", LogLevel::DEBUG);
 				if (response == nullptr)
 					break;
 				auto identifier = std::make_pair(response->getSourceAddress(), response->getSourcePort());

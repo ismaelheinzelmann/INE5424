@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 			std::string idString = std::string();
 			std::cout << "Choose which node you want to send the message:" << std::endl;
 			std::cin >> idString;
-			std::cin.ignore(); // Remove this if necessary
+			std::cin.ignore();
 			int success = 0;
 			for (int i = 0; i < 100; i++) {
 				std::string message = "Node: " + std::to_string(strtol(argv[1], nullptr, 10)) + " | Message: " + std::to_string(i);
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 				if (sent){
 					success++;
 				} else {
-				std::cout<<"FALHOU"<<std::endl;
+					std::cout<<"Falha."<<std::endl;
 				}
 			}
 			std::cout << "Success in " + std::to_string(success) + " of 100 messages." << std::endl;
