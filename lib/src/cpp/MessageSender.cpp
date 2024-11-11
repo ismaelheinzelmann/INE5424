@@ -16,10 +16,10 @@
 #include <random>
 #include <thread>
 
-#define RETRY_ACK_ATTEMPT 3
+#define RETRY_ACK_ATTEMPT 6
 #define RETRY_ACK_TIMEOUT_USEC 200
 
-#define RETRY_DATA_ATTEMPT 6
+#define RETRY_DATA_ATTEMPT 8
 #define RETRY_DATA_TIMEOUT_USEC 100
 #define RETRY_DATA_TIMEOUT_USEC_MAX 800
 #define TIMEOUT_INCREMENT 200
@@ -229,6 +229,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 			return true;
 		}
 		for (int attempt = 0; attempt < RETRY_DATA_ATTEMPT; attempt++) {
+			Logger::log("Retry", LogLevel::DEBUG);
 			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) && batchIndex != batchCount) {
 				break;
 			}
@@ -257,7 +258,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 			while (true) {
 				// Batch acordado, procede para o proximo batch
 				if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) &&
-					batchIndex != batchCount) {
+					batchStart != batchCount-1) {
 					break;
 				}
 				// Todos responderam FINACK
@@ -266,8 +267,10 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					return true;
 				}
 				int timeoutMS = std::min(RETRY_ACK_TIMEOUT_USEC + 100 * attempt, 500);
+				Logger::log("Before timeout", LogLevel::DEBUG);
 				Datagram *response = datagramController->getDatagramTimeout(
 					{datagram.getSourceAddress(), datagram.getDestinationPort()}, timeoutMS);
+				Logger::log("After timeout", LogLevel::DEBUG);
 				if (response == nullptr)
 					break;
 				auto identifier = std::make_pair(response->getSourceAddress(), response->getSourcePort());

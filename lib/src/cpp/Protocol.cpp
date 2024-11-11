@@ -124,6 +124,7 @@ bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr
 	if (bytes_received < 0)
 		return false;
 	buff->resize(bytes_received);
+	// Generate fault returns true if the package should be dropped.
 	if (generateFault(buff, dropChance, corruptChance))
 		return false; // Package dropped
 
@@ -142,10 +143,12 @@ bool Protocol::readDatagramSocket(Datagram *datagramBuff, int socketfd, sockaddr
 
 // Will return true if the packet should be dropped.
 bool Protocol::generateFault(std::vector<unsigned char>* data, int dropChance, int corruptChance) {
+	// Return true if package should be dropped.
 	if (FaultInjector::returnTrueByChance(dropChance)) {
 		Logger::log("Packet received will be dropped and ignored.", LogLevel::FAULT);
 		return true;
 	}
+	// If the package is not dropped, verify if the package should be corrupted.
 	if (FaultInjector::returnTrueByChance(corruptChance)) {
 		FaultInjector::corruptVector(data);
 	}

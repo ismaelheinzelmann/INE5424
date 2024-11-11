@@ -22,16 +22,17 @@ void FaultInjector::corruptVector(std::vector<unsigned char>* data) {
     }
     std::random_device rd;
     std::mt19937 gen(rd());
+	// Select some indexes of the datagram data.
     std::uniform_int_distribution<> indexDis(0, data->size() - 1);
-
-    std::uniform_int_distribution<> numCorruptions(1, 20);
+	// Select a number of corruptions between 1 and half of the data.
+    std::uniform_int_distribution<> numCorruptions(1, data->size()/2);
     int corruptionCount = numCorruptions(gen);
 
+	// Iterate over the selected corrupted bytes, inverting them.
     for (int i = 0; i < corruptionCount; ++i) {
         int index = indexDis(gen);
         unsigned char originalValue = (*data)[index];
         unsigned char corruptedValue = ~originalValue;
         (*data)[index] = corruptedValue;
     }
-	Logger::log("Corrupted.", LogLevel::DEBUG);
 }
