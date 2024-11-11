@@ -73,8 +73,11 @@ int main(int argc, char *argv[])
 				std::string message = "Node: " + std::to_string(strtol(argv[1], nullptr, 10)) + " | Message: " + std::to_string(i);
 				std::vector<unsigned char> messageBytes(message.begin(), message.end());
 				bool sent = rb.sendBroadcast(messageBytes);
-				if (sent)
+				if (sent) {
 					success++;
+				} else {
+					Logger::log("Message failed.", LogLevel::INFO);
+				}
 			}
 			std::cout << "Success in " + std::to_string(success) + " of 100 messages." << std::endl;
 			std::cout<< "Messages contents:"<<std::endl;

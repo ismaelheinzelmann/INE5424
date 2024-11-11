@@ -284,7 +284,7 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 	switch (broadcastType) {
 	case AB:
-		if (!message->allACK() || message->delivered)
+		if (!message->allACK())
 			return;
 		channelOccupied = false;
 		message->delivered = true;

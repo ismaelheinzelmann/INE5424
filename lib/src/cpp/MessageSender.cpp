@@ -67,9 +67,9 @@ void MessageSender::buildBroadcastDatagrams(
 	in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char> &message,
 	std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
 	std::map<unsigned short, bool> acknowledgments, responses;
-	// for (auto [_, nodeAddr] : *this->configMap) {
-	// 	(*members)[{nodeAddr.sin_addr.s_addr, nodeAddr.sin_port}] = false;
-	// }
+	for (auto [_, nodeAddr] : *this->configMap) {
+		(*members)[{nodeAddr.sin_addr.s_addr, nodeAddr.sin_port}] = false;
+	}
 	for (int i = 0; i < totalDatagrams; ++i) {
 		auto versionDatagram = Datagram();
 		versionDatagram.setSourceAddress(configAddr.sin_addr.s_addr);
@@ -140,9 +140,8 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 			}
 			while (true) {
 				int timeoutMS = std::min(RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt, 800);
-				Datagram *response =
-					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
-														   timeoutMS);
+				Datagram *response = datagramController->getDatagramTimeout(
+					{datagram.getSourceAddress(), datagram.getDestinationPort()}, timeoutMS);
 				if (response == nullptr)
 					break;
 				// Resposta de outro batch, pode ser descartada.
@@ -250,13 +249,15 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 						break;
 					}
 				}
-				if (!datagramAcked)
+
+				if (!datagramAcked || batchStart == batchCount - 1)
 					sendto(broadcastFD, datagrams[batchIndex].data(), datagrams[batchIndex].size(), 0,
 						   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
 				// Batch acordado, procede para o proximo batch
-				if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) && batchIndex != batchCount) {
+				if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) &&
+					batchIndex != batchCount) {
 					break;
 				}
 				// Todos responderam FINACK
@@ -265,31 +266,28 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					return true;
 				}
 				int timeoutMS = std::min(RETRY_ACK_TIMEOUT_USEC + 100 * attempt, 500);
-				Logger::log(std::to_string(timeoutMS), LogLevel::DEBUG);
-				Datagram *response =
-					datagramController->getDatagramTimeout({datagram.getSourceAddress(), datagram.getDestinationPort()},
-														   timeoutMS);
+				Datagram *response = datagramController->getDatagramTimeout(
+					{datagram.getSourceAddress(), datagram.getDestinationPort()}, timeoutMS);
 				if (response == nullptr)
 					break;
 				auto identifier = std::make_pair(response->getSourceAddress(), response->getSourcePort());
 				// Resposta de outro batch, pode ser descartada.
 				if (response->getVersion() < batchStart * batchSize ||
-					response->getVersion()  > (batchStart * batchSize) + batchSize) {
+					response->getVersion() > (batchStart * batchSize) + batchSize) {
 					Logger::log("Received old response.", LogLevel::DEBUG);
 					continue;
 				}
-				// Armazena informação de ACK recebido.
-				if (response->getVersion() <= totalDatagrams && response->isACK() &&
-					membersAcks.contains(identifier) && !membersAcks[identifier][response->getVersion() - 1].first) {
-					Logger::log("Datagram of version " + std::to_string(response->getVersion()) + " accepted.",
-								LogLevel::DEBUG);
-					membersAcks[identifier][response->getVersion() - 1] = {true, true};
-				}
-
 				// Conexão finalizada, com ou sem sucesso.
 				if (response->isACK() && response->isFIN()) {
 					if (members.contains(identifier))
 						members[identifier] = true;
+				}
+				// Armazena informação de ACK recebido.
+				if (response->getVersion() <= totalDatagrams && response->isACK() && membersAcks.contains(identifier) &&
+					!membersAcks[identifier][response->getVersion() - 1].first) {
+					Logger::log("Datagram of version " + std::to_string(response->getVersion()) + " accepted.",
+								LogLevel::DEBUG);
+					membersAcks[identifier][response->getVersion() - 1] = {true, true};
 				}
 			}
 		}
