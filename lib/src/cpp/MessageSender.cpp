@@ -1,4 +1,5 @@
 #include "../header/MessageSender.h"
+
 #include <cmath>
 #include <iostream>
 #include <iterator>
@@ -11,6 +12,7 @@
 #include "../header/ConfigParser.h"
 #include "../header/Logger.h"
 #include "../header/Protocol.h"
+#include "TypeUtils.h"
 
 #include <cstring>
 #include <random>
@@ -27,13 +29,14 @@
 
 MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
 							 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configMap,
-							 BroadcastType broadcastType) {
+							 BroadcastType broadcastType, StatusDTO status) {
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
 	this->datagramController = datagramController;
 	this->configAddr = configIdAddr;
 	this->configMap = configMap;
 	this->broadcastType = broadcastType;
+	this->status = status;
 }
 
 void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
@@ -207,7 +210,9 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	sockaddr_in destin = Protocol::broadcastAddress();
 	auto members = std::map<std::pair<unsigned int, unsigned short>, bool>();
 	// unsigned short initialMembersSize = members.size();
-	if (!broadcastAckAttempts(destin, &datagram, &members)) {
+	const bool acked = broadcastType == AB ? atomicBroadcastAckAttempts(destin, &datagram, &members)
+										   : broadcastAckAttempts(destin, &datagram, &members);
+	if (!acked) {
 		close(transientSocketFd.first);
 		return false;
 	}
@@ -258,7 +263,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 			while (true) {
 				// Batch acordado, procede para o proximo batch
 				if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) &&
-					batchStart != batchCount-1) {
+					batchStart != batchCount - 1) {
 					break;
 				}
 				// Todos responderam FINACK
@@ -500,4 +505,86 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 	const unsigned long f = configMap->size() - members->size();
 	// Para um processo falho, deve-se ter 3 processos corretos respondendo.
 	return members->size() >= 2 * f + 1;
+}
+
+// Manda SYN
+// Conta os SYN+ACK, até chegar em um consenso de 2F + 1 no numero de ordem
+// Receiver vai receber esses SYN+ACK tb e vai se adaptar a maioria, considerando aquele consenso
+bool MessageSender::atomicBroadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
+											   std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
+	Flags flags;
+	flags.SYN = true;
+	Protocol::setFlags(datagram, &flags);
+	auto buff = std::vector<unsigned char>(1048);
+	std::map<std::pair<unsigned int, unsigned short>, unsigned int> order;
+	{
+		std::lock_guard lock(*status.heartbeatsLock);
+		for (auto [identifier, status] : *status.nodeStatus) {
+			if (status == INITIALIZED) {
+				(*members)[identifier] = false;
+			}
+		}
+	}
+	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
+		bool sent = Protocol::sendDatagram(datagram, &destin, broadcastFD, &flags);
+		if (!sent) {
+			Logger::log("Failed sending ACK datagram.", LogLevel::WARNING);
+			continue;
+		}
+		while (true) {
+			if (order.size() == members->size()) {
+				unsigned short orderVerify = 0;
+				bool verify = true;
+				for (auto [member, memberOrder] : order) {
+					if (orderVerify == 0)
+						orderVerify = memberOrder;
+					else if (orderVerify != memberOrder) {
+						verify = false;
+					}
+				}
+				if (verify) {
+					return true;
+				}
+			}
+
+			Datagram *response =
+				datagramController->getDatagramTimeout({datagram->getSourceAddress(), datagram->getDestinationPort()},
+													   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
+			if (response == nullptr) {
+				break;
+			}
+			if (response->isACK() && response->isSYN() && datagram->getVersion() == response->getVersion()) {
+				for (auto [_, addr] : *configMap) {
+					if (addr.sin_addr.s_addr == datagram->getSourceAddress() &&
+						addr.sin_port == datagram->getSourcePort()) {
+						if (response->getData()->size() >= 4) {
+							order[{response->getSourceAddress(), response->getSourcePort()}] =
+								TypeUtils::buffToUnsignedInt(*response->getData(), 0);
+						}
+						(*members)[{response->getSourceAddress(), response->getSourcePort()}] = false;
+						break;
+					}
+				}
+			}
+		}
+	}
+	// Order, counter of votes
+	std::map<unsigned int, unsigned int> counter;
+	for (auto [_, memberOrder] : order) {
+		if (!counter.count(memberOrder)) {
+			counter[memberOrder] = 1;
+		}
+		else {
+			counter[memberOrder]++;
+		}
+	}
+	const unsigned int fault = (members->size() - 1) / 2;
+
+	for (const auto &[key, votes] : counter) {
+		if (votes >= static_cast<int>(members->size()) - fault) {
+			return true;
+		}
+	}
+	return false;
+
 }

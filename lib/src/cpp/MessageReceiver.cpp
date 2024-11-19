@@ -12,7 +12,7 @@
 
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 								 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-								 unsigned short id, const BroadcastType &broadcastType, int broadcastFD) {
+								 unsigned short id, const BroadcastType &broadcastType, int broadcastFD, StatusDTO statusDTO) {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
 	this->datagramController = datagramController;
@@ -24,6 +24,7 @@ MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsig
 	this->id = id;
 	this->broadcastType = broadcastType;
 	this->broadcastFD = broadcastFD;
+	this->status = statusDTO;
 }
 
 MessageReceiver::~MessageReceiver() {
@@ -77,19 +78,22 @@ void MessageReceiver::cleanse() {
 void MessageReceiver::heartbeat() {
 	while (running) {
 		{
-			sendHEARTBEAT({channelMessageIP, channelMessagePort}, broadcastFD);
+			sendHEARTBEAT(broadcastFD);
 			std::this_thread::sleep_for(std::chrono::seconds(1));
 			std::vector<std::pair<unsigned int, unsigned short>> removes;
-			for (auto [identifier, time] : heartbeatsTimes) {
+			for (auto [identifier, time] : *status.heartbeatsTimes) {
 				if (std::chrono::system_clock::now() - time >= std::chrono::seconds(3)) {
 					removes.emplace_back(identifier);
 				}
 			}
 			for (auto identifier : removes) {
-				if (heartbeats.count(identifier))
-					heartbeats.erase(identifier);
-				if (heartbeatsTimes.count(identifier))
-					heartbeatsTimes.erase(identifier);
+				std::lock_guard lock(*status.heartbeatsLock);
+				if (status.order->count(identifier))
+					status.order->erase(identifier);
+				if (status.heartbeatsTimes->count(identifier))
+					status.heartbeatsTimes->erase(identifier);
+				if (status.nodeStatus->count(identifier))
+					(*status.nodeStatus)[identifier] = DEFECTIVE;
 			}
 		}
 	}
@@ -154,57 +158,19 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	Datagram *datagram = request->datagram;
 	if (datagram->isHEARTBEAT()) {
 		std::pair identifier = {datagram->getSourceAddress(), datagram->getSourcePort()};
-		std::unique_lock hblock(heartbeatsLock);
-		heartbeats[identifier] = {datagram->getDestinAddress(), datagram->getDestinationPort()};
-		heartbeatsTimes[identifier] = std::chrono::system_clock::now();
+		std::unique_lock hblock(*status.heartbeatsLock);
+		(*status.heartbeatsTimes)[identifier] = std::chrono::system_clock::now();
+		(*status.nodeStatus)[identifier] = INITIALIZED;
 		return;
 	}
 
-	// Se não tiver esperando mensagem, aceita
-	// Se estiver esperando, verifica se a mensagem é a esperada
-	//		Se for a esperada, continua
-	//		Se não for a esperada, verifique o consenso. Se o consenso é igual ela ou o consenso é 0, continua
-	//			Se não, retorna
+
 	Message *message = getMessage(request->datagram);
 	if (message != nullptr && message->delivered && request->datagram->getFlags() == 0) {
 		sendDatagramFINACK(request, socketfd);
 		return;
 	}
 
-	// Não possui nenhuma mensagem esperada
-	if (broadcastType == AB) {
-		// Cria uma mensagem mesmo que não vá ser utilizada para posterior consenso
-		if (datagram->getFlags() == 2) {
-			createMessage(request, socketfd);
-		}
-		// Caso haja alguma mensagem esperada
-		if (channelOccupied) {
-			std::pair messageID = {request->datagram->getDestinAddress(), request->datagram->getDestinationPort()};
-			// Se a mensagem recebida for diferente da esperada
-			if (channelMessageIP != messageID.first || channelMessagePort != messageID.second) {
-				std::pair<unsigned int, unsigned short> channelMessageID = {channelMessageIP, channelMessagePort};
-				std::pair consent = verifyConsensus();
-				// Consenso espera alguma coisa
-				if ((consent.first != 0 || consent.second != 0) &&
-					(consent.first != channelMessageID.first || consent.second != channelMessageID.second)) {
-					if (messages.contains(consent)) {
-						std::shared_lock messageLock(*messages[consent]->getMutex());
-						// Mensagem anterior não foi finalizada e recebeu um timeout, logo substitui a mensagem aceita.
-						if (!messages[consent]->delivered &&
-							messages[consent]->getLastUpdate() - std::chrono::system_clock::now() >
-								std::chrono::seconds(3)) {
-
-							channelMessageIP = consent.first;
-							channelMessagePort = consent.second;
-						} else {
-							// Mensagem anterior não foi finalizada, porém ainda não tomou timeout
-							return;
-						}
-					}
-				}
-			}
-		}
-	}
 
 	// Data datagram
 	if (datagram->getFlags() == 0) {
@@ -242,32 +208,6 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 	}
 }
 
-std::pair<unsigned int, unsigned short> MessageReceiver::verifyConsensus() {
-	std::map<std::pair<in_addr_t, in_port_t>, int> countMap;
-
-	for (const auto &entry : heartbeats) {
-		countMap[entry.second]++;
-	}
-
-	std::vector<std::pair<std::pair<in_addr_t, in_port_t>, int>> sortedCounts(countMap.begin(), countMap.end());
-
-	std::sort(sortedCounts.begin(), sortedCounts.end(), [](const auto &a, const auto &b) {
-		if (a.second != b.second) {
-			return a.second > b.second;
-		}
-		if (a.first.first != b.first.first) {
-			return a.first.first < b.first.first;
-		}
-		return a.first.second < b.first.second;
-	});
-	if (!sortedCounts.empty()) {
-		const auto &result = sortedCounts.front().first;
-		return {result.first, result.second};
-	}
-
-	return {0, 0};
-}
-
 void MessageReceiver::createMessage(Request *request, bool broadcast) {
 	if (!messages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()})) {
 		auto *message = new Message(request->datagram->getDatagramTotal());
@@ -281,7 +221,7 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 	if (broadcast && broadcastType == AB) {
 		channelMessageIP = request->datagram->getDestinAddress();
 		channelMessagePort = request->datagram->getDestinationPort();
-		sendHEARTBEAT({channelMessageIP, channelMessagePort}, socketfd);
+		sendHEARTBEAT(socketfd);
 		channelOccupied = true;
 	}
 	createMessage(request, broadcast);
@@ -295,7 +235,7 @@ void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 			return;
 		channelOccupied = false;
 		message->delivered = true;
-		sendHEARTBEAT({0, 0}, broadcastfd);
+		sendHEARTBEAT(broadcastfd);
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;
 	case URB:
@@ -399,13 +339,13 @@ bool MessageReceiver::sendDatagramSYNACK(Request *request, int socketfd) {
 	return sent;
 }
 
-bool MessageReceiver::sendHEARTBEAT(std::pair<unsigned int, unsigned short> target, int socketfd) {
+bool MessageReceiver::sendHEARTBEAT(int socketfd) {
 	auto heartbeat = Datagram();
 	sockaddr_in source = configs->at(id);
 	heartbeat.setSourceAddress(source.sin_addr.s_addr);
 	heartbeat.setSourcePort(source.sin_port);
-	heartbeat.setDestinAddress(target.first);
-	heartbeat.setDestinationPort(target.second);
+	// heartbeat.setDestinAddress(target.first);
+	// heartbeat.setDestinationPort(target.second);
 
 	Flags flags;
 	flags.HEARTBEAT = true;

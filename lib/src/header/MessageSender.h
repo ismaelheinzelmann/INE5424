@@ -9,15 +9,16 @@
 
 #include "BroadcastType.h"
 
+#include "StatusDTO.h"
+
 #ifndef MESSAGESENDER_H
 #define MESSAGESENDER_H
 
 
 class MessageSender {
 public:
-	explicit MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr, DatagramController *datagramController,
-				  std::map<unsigned short, sockaddr_in> *configMap, BroadcastType broadcastType);
-
+	MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr, DatagramController *datagramController,
+				  std::map<unsigned short, sockaddr_in> *configMap, BroadcastType broadcastType, StatusDTO status);
 	~MessageSender() = default;
 	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
 	bool sendBroadcast(std::vector<unsigned char> &message);
@@ -26,6 +27,7 @@ public:
 		std::map<std::pair<unsigned int, unsigned short>, bool> *members);
 
 private:
+	StatusDTO status;
 	int socketFD;
 	int broadcastFD;
 	sockaddr_in configAddr;
@@ -56,6 +58,8 @@ private:
 	bool ackAttempts(sockaddr_in &destin, Datagram *datagram);
 	bool broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
 							  std::map<std::pair<unsigned int, unsigned short>, bool> *members);
+	bool atomicBroadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
+												   std::map<std::pair<unsigned int, unsigned short>, bool> *members);
 };
 
 

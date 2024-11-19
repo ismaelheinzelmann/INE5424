@@ -18,18 +18,19 @@
 
 #include "BroadcastType.h"
 
+#include "StatusDTO.h"
+
 
 // Thread that verifies every N seconds and remove requisitions that timedout;
 class MessageReceiver {
 public:
 	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 					DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-					unsigned short id, const BroadcastType &broadcastType, int broadcastFD);
+					unsigned short id, const BroadcastType &broadcastType, int broadcastFD, StatusDTO statusDTO);
 	~MessageReceiver();
 	void stop();
 	void handleMessage(Request *request, int socketfd);
 	void handleBroadcastMessage(Request *request, int socketfd);
-	std::pair<unsigned int, unsigned short> verifyConsensus();
 	void createMessage(Request *request, bool broadcast);
 
 private:
@@ -42,14 +43,12 @@ private:
 	DatagramController *datagramController;
 	unsigned short id;
 	int broadcastFD;
+	StatusDTO status;
 
 	// Atomic
 	std::atomic_bool channelOccupied;
 	std::atomic<unsigned int> channelMessageIP = 0;
 	std::atomic<unsigned short> channelMessagePort = 0;
-	std::map<std::pair<in_addr_t, in_port_t>, std::pair<in_addr_t, in_port_t>> heartbeats;
-	std::map<std::pair<in_addr_t, in_port_t>, std::chrono::system_clock::time_point> heartbeatsTimes;
-	std::mutex heartbeatsLock;
 
 	// Cleanse
 	std::condition_variable cv;
@@ -64,7 +63,7 @@ private:
 	static bool verifyMessage(Request *request);
 	void handleDataMessage(Request *request, int socketfd);
 	bool sendDatagramSYNACK(Request *request, int socketfd);
-	bool sendHEARTBEAT(std::pair<unsigned int, unsigned short>, int socketfd);
+	bool sendHEARTBEAT(int socketfd);
 	Message *getMessage(Datagram *datagram);
 	bool sendDatagramACK(Request *request, int socketfd);
 	bool sendDatagramFINACK(Request *request, int socketfd);

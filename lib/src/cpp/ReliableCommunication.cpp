@@ -1,7 +1,7 @@
 #include "../header/ReliableCommunication.h"
 
-#include "BroadcastType.h"
 #include <Logger.h>
+#include "BroadcastType.h"
 
 #include <cmath>
 #include <iostream>
@@ -71,13 +71,18 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	}
 	// End Broadcast
 
-	for (auto [_,config]: configMap) {
+	for (auto [_, config] : configMap) {
 		nodeStatus[{config.sin_addr.s_addr, config.sin_port}] = NOT_INITIALIZED;
 	}
+	StatusDTO status;
+	status.order = &order;
+	status.heartbeatsLock = &statusMutex;
+	status.heartbeatsTimes = &heartbeatsTimes;
+	status.nodeStatus = &nodeStatus;
 
-	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo);
-	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType);
-
+	handler =
+		new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo, status);
+	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType, status);
 }
 
 ReliableCommunication::~ReliableCommunication() {
@@ -147,11 +152,11 @@ void ReliableCommunication::processBroadcastDatagram() {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
-		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer, faults.first, faults.second)) {
+		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer, faults.first,
+										  faults.second)) {
 			continue;
 		}
-		if (!verifyOriginBroadcast(datagram.getSourcePort()))
-		{
+		if (!verifyOriginBroadcast(datagram.getSourcePort())) {
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);
 			continue;
 		}
@@ -176,27 +181,22 @@ void ReliableCommunication::printNodes(std::mutex *printLock) const {
 		std::cout << fst << std::endl;
 }
 
-BroadcastType ReliableCommunication::getBroadcastType() const
-{
-	return this->broadcastType;
-}
+BroadcastType ReliableCommunication::getBroadcastType() const { return this->broadcastType; }
 
-std::pair<int, int> ReliableCommunication::getFaults() const
-{
-	return this->faults;
-}
+std::pair<int, int> ReliableCommunication::getFaults() const { return this->faults; }
 
 
 bool ReliableCommunication::verifyOrigin(Datagram *datagram) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
-		if (datagram->getSourceAddress() == nodeAddr.sin_addr.s_addr && datagram->getSourcePort() == nodeAddr.sin_port) {
+		if (datagram->getSourceAddress() == nodeAddr.sin_addr.s_addr &&
+			datagram->getSourcePort() == nodeAddr.sin_port) {
 			return true;
 		}
 	}
 	return false;
 }
 
-bool ReliableCommunication::verifyOriginBroadcast( int requestSourcePort) {
+bool ReliableCommunication::verifyOriginBroadcast(int requestSourcePort) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
 		if (requestSourcePort == nodeAddr.sin_port) {
 			return true;
