@@ -9,6 +9,7 @@
 #include "Datagram.h"
 #include "MessageReceiver.h"
 #include "MessageSender.h"
+#include "NodeStatus.h"
 
 #include "BroadcastType.h"
 
@@ -42,6 +43,9 @@ private:
 	std::pair<int, int> faults;
 	BlockingQueue<std::pair<bool,std::vector<unsigned char>>> messageQueue;
 	DatagramController datagramController;
+
+	std::shared_mutex statusMutex;
+	std::map<std::pair<unsigned int, unsigned short>, NodeStatus> nodeStatus;
 
 	std::thread processingThread;
 	std::thread processingBroadcastThread;

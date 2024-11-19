@@ -62,7 +62,7 @@ void MessageReceiver::cleanse() {
 			std::lock_guard messagesLock(messagesMutex);
 			auto remove = std::vector<std::pair<unsigned int, unsigned short>>();
 			for (auto [identifier, message] : messages) {
-				if (std::chrono::system_clock::now() - message->getLastUpdate() > std::chrono::seconds(10)) {
+				if (message->allACK()) {
 					remove.emplace_back(identifier);
 				}
 			}
@@ -291,7 +291,7 @@ void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool br
 void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 	switch (broadcastType) {
 	case AB:
-		if (!message->allACK())
+		if (!message->faultyACK())
 			return;
 		channelOccupied = false;
 		message->delivered = true;
@@ -299,7 +299,7 @@ void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;
 	case URB:
-		if (!message->allACK() || message->delivered)
+		if (!message->faultyACK() || message->delivered)
 			return;
 		message->delivered = true;
 		messageQueue->push(std::make_pair(true, *message->getData()));

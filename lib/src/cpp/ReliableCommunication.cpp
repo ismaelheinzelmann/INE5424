@@ -71,6 +71,10 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	}
 	// End Broadcast
 
+	for (auto [_,config]: configMap) {
+		nodeStatus[{config.sin_addr.s_addr, config.sin_port}] = NOT_INITIALIZED;
+	}
+
 	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo);
 	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType);
 

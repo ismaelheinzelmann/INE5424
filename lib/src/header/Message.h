@@ -25,6 +25,7 @@ public:
 	bool broadcastMessage = false;
 	std::map<std::pair<unsigned int, unsigned short>, bool> acks;
 	bool allACK();
+	bool faultyACK();
 
 
 private:

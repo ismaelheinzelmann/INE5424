@@ -13,7 +13,7 @@ Message::Message(unsigned short totalDatagrams) {
 
 Message::~Message() { delete data; }
 
-bool Message::allACK() {
+bool Message::faultyACK() {
 	unsigned long finAcks = 0;
 	for (const auto ack : acks | std::views::values)
 		if (ack)
@@ -22,6 +22,12 @@ bool Message::allACK() {
 	return finAcks >= 2 * f + 1;
 }
 
+bool Message::allACK() {
+	for (const auto ack : acks | std::views::values)
+		if (!ack)
+			return false;
+	return true;
+}
 
 std::shared_mutex *Message::getMutex() { return &messageMutex; }
 
