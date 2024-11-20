@@ -47,12 +47,14 @@ public:
 	bool isEND();
 	bool isBROADCAST();
 	bool isHEARTBEAT();
+	bool isORDER();
 	void setIsACK();
 	void setIsSYN();
 	void setIsFIN();
 	void setIsEND();
 	void setIsBROADCAST();
 	void setIsHEARTBEAT();
+	void setIsORDER();
 
 
 	bool isBitSet(unsigned short value, int bitPosition);

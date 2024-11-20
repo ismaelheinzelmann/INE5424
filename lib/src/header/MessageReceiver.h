@@ -32,6 +32,7 @@ public:
 	void handleMessage(Request *request, int socketfd);
 	void handleBroadcastMessage(Request *request, int socketfd);
 	void createMessage(Request *request, bool broadcast);
+	void consensusSYNACK(Request *request, int socketfd, unsigned order);
 
 private:
 	std::map<std::pair<in_addr_t, in_port_t>, Message *> messages;
@@ -44,6 +45,9 @@ private:
 	unsigned short id;
 	int broadcastFD;
 	StatusDTO status;
+
+	std::map<unsigned int, Message*> messageOrder;
+	unsigned int lastMessage = 0;
 
 	// Atomic
 	std::atomic_bool channelOccupied;
@@ -58,6 +62,8 @@ private:
 	BroadcastType broadcastType;
 
 	void handleFirstMessage(Request *request, int socketfd, bool broadcast = false);
+	unsigned getOrder(Datagram *datagram);
+	unsigned short getMemberSize();
 	void deliverBroadcast(Message *message, int broadcastfd);
 	void handleBroadcastDataMessage(Request *request, int socketfd);
 	static bool verifyMessage(Request *request);

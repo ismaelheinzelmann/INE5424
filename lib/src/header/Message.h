@@ -26,6 +26,9 @@ public:
 	std::map<std::pair<unsigned int, unsigned short>, bool> acks;
 	bool allACK();
 	bool faultyACK();
+	unsigned getMajorityOrder(unsigned short membersSize);
+	std::map<std::pair<unsigned, unsigned short>, unsigned> order;
+	bool orderConfirmed = false;
 
 
 private:

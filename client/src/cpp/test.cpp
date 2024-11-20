@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
 		}
 		else if (type == "2") {
 			int success = 0;
-			for (int i = 0; i < 100; i++) {
+			for (int i = 0; i < 10; i++) {
 				std::string message = "Node: " + std::to_string(strtol(argv[1], nullptr, 10)) + " | Message: " + std::to_string(i);
 				std::vector<unsigned char> messageBytes(message.begin(), message.end());
 				bool sent = rb.sendBroadcast(messageBytes);
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 			}
 			std::cout << "Success in " + std::to_string(success) + " of 100 messages." << std::endl;
 			std::cout<< "Messages contents:"<<std::endl;
-			for (int i = 0; i < success; i++) {
+			while (true) {
 				auto receivedMessage = rb.receive();
 				std::string str(receivedMessage.second.begin(), receivedMessage.second.end());
 				std::cout<<str<<std::endl;

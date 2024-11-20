@@ -35,9 +35,9 @@ unsigned int TypeUtils::buffToUnsignedInt(const std::vector<unsigned char> &buff
 }
 
 
-void TypeUtils::uintToBytes(unsigned int value, unsigned char bytes[4]) {
-	bytes[0] = static_cast<unsigned char>(value & 0xFF); // Extract least significant byte
-	bytes[1] = static_cast<unsigned char>((value >> 8) & 0xFF); // Extract second byte
-	bytes[2] = static_cast<unsigned char>((value >> 16) & 0xFF); // Extract third byte
-	bytes[3] = static_cast<unsigned char>((value >> 24) & 0xFF); // Extract most significant byte
+void TypeUtils::uintToBytes(unsigned int value, std::vector<unsigned char> *bytes) {
+	(*bytes)[0] = static_cast<unsigned char>(value & 0xFF); // Extract least significant byte
+	(*bytes)[1] = static_cast<unsigned char>((value >> 8) & 0xFF); // Extract second byte
+	(*bytes)[2] = static_cast<unsigned char>((value >> 16) & 0xFF); // Extract third byte
+	(*bytes)[3] = static_cast<unsigned char>((value >> 24) & 0xFF); // Extract most significant byte
 }

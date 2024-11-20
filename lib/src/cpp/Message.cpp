@@ -72,3 +72,20 @@ bool Message::verifyMessage(Datagram &datagram) const {
 void Message::incrementVersion() { lastUpdate = std::chrono::system_clock::now(); }
 
 std::chrono::system_clock::time_point Message::getLastUpdate() { return lastUpdate; }
+
+unsigned Message::getMajorityOrder(unsigned short membersSize) {
+	if (order.size() != membersSize) {
+		return 0;
+	}
+	std::map<unsigned, unsigned> voteCount;
+	for (const auto& entry : order) {
+		voteCount[entry.second]++;
+	}
+	unsigned majority = (membersSize / 2) + 1;
+	for (const auto& [vote, count] : voteCount) {
+		if (count >= majority) {
+			return vote;
+		}
+	}
+	return 0;
+}

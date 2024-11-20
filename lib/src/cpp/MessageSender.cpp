@@ -29,7 +29,7 @@
 
 MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
 							 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configMap,
-							 BroadcastType broadcastType, StatusDTO status) {
+							 unsigned short id, BroadcastType broadcastType, StatusDTO status) {
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
 	this->datagramController = datagramController;
@@ -37,6 +37,7 @@ MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configId
 	this->configMap = configMap;
 	this->broadcastType = broadcastType;
 	this->status = status;
+	this->id = id;
 }
 
 void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
@@ -507,9 +508,8 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 	return members->size() >= 2 * f + 1;
 }
 
-// Manda SYN
-// Conta os SYN+ACK, até chegar em um consenso de 2F + 1 no numero de ordem
-// Receiver vai receber esses SYN+ACK tb e vai se adaptar a maioria, considerando aquele consenso
+// Envia solicitação de mensagens
+// Ao conseguir consenso, envia e espera order ORDER+ACK.
 bool MessageSender::atomicBroadcastAckAttempts(sockaddr_in &destin, Datagram *datagram,
 											   std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
 	Flags flags;
@@ -525,7 +525,11 @@ bool MessageSender::atomicBroadcastAckAttempts(sockaddr_in &destin, Datagram *da
 			}
 		}
 	}
+	bool verify = false;
+	unsigned acknowledgedOrder = 0;
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
+		if (verify)
+			break;
 		bool sent = Protocol::sendDatagram(datagram, &destin, broadcastFD, &flags);
 		if (!sent) {
 			Logger::log("Failed sending ACK datagram.", LogLevel::WARNING);
@@ -533,23 +537,21 @@ bool MessageSender::atomicBroadcastAckAttempts(sockaddr_in &destin, Datagram *da
 		}
 		while (true) {
 			if (order.size() == members->size()) {
-				unsigned short orderVerify = 0;
-				bool verify = true;
+				verify = true;
 				for (auto [member, memberOrder] : order) {
-					if (orderVerify == 0)
-						orderVerify = memberOrder;
-					else if (orderVerify != memberOrder) {
+					if (acknowledgedOrder == 0) {
+						acknowledgedOrder = memberOrder;
+					} else if (acknowledgedOrder != memberOrder) {
 						verify = false;
+						acknowledgedOrder = 0;
+						break;
 					}
 				}
-				if (verify) {
-					return true;
-				}
+				if (verify) break;
 			}
 
-			Datagram *response =
-				datagramController->getDatagramTimeout({datagram->getSourceAddress(), datagram->getDestinationPort()},
-													   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
+			Datagram *response = datagramController->getDatagramTimeout(
+				{datagram->getSourceAddress(), datagram->getDestinationPort()}, RETRY_ACK_TIMEOUT_USEC);
 			if (response == nullptr) {
 				break;
 			}
@@ -582,9 +584,26 @@ bool MessageSender::atomicBroadcastAckAttempts(sockaddr_in &destin, Datagram *da
 
 	for (const auto &[key, votes] : counter) {
 		if (votes >= static_cast<int>(members->size()) - fault) {
+			consensusORDER(datagram, broadcastFD, key);
 			return true;
 		}
 	}
 	return false;
+}
 
+void MessageSender::consensusORDER(Datagram *datagram, int socketfd, unsigned order) {
+	auto orderDatagram = Datagram(datagram);
+	sockaddr_in source = configMap->at(id);
+	orderDatagram.setSourceAddress(source.sin_addr.s_addr);
+	orderDatagram.setSourcePort(source.sin_port);
+	Flags flags;
+	flags.ORDER = true;
+	Protocol::setFlags(&orderDatagram, &flags);
+	datagram->setDataLength(4);
+	std::vector<unsigned char> bytes = std::vector<unsigned char>(4);
+	TypeUtils::uintToBytes(order, &bytes);
+	datagram->setData(bytes);
+	datagram->setDataLength(4);
+	auto addr = Protocol::broadcastAddress();
+	Protocol::sendDatagram(&orderDatagram, &addr, socketfd, &flags);
 }

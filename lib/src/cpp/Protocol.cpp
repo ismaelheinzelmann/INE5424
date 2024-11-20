@@ -190,6 +190,9 @@ void Protocol::setFlags(Datagram *datagram, Flags *flags) {
 		datagram->setIsBROADCAST();
 	if (flags->HEARTBEAT)
 		datagram->setIsHEARTBEAT();
+	if (flags->ORDER) {
+		datagram->setIsORDER();
+	}
 }
 
 void Protocol::setBroadcast(Request *request) {

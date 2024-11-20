@@ -47,7 +47,7 @@ private:
 	std::map<std::pair<unsigned int, unsigned short>, NodeStatus> nodeStatus;
 	std::map<std::pair<in_addr_t, in_port_t>, std::pair<std::pair<in_addr_t, in_port_t>, unsigned int>> order;
 	std::map<std::pair<in_addr_t, in_port_t>, std::chrono::system_clock::time_point> heartbeatsTimes;
-	std::mutex statusMutex;
+	std::shared_mutex statusMutex;
 
 	std::thread processingThread;
 	std::thread processingBroadcastThread;

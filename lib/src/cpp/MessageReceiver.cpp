@@ -1,5 +1,6 @@
 #include "../header/MessageReceiver.h"
 
+#include <TypeUtils.h>
 #include <iostream>
 #include <map>
 #include <shared_mutex>
@@ -12,7 +13,8 @@
 
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 								 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-								 unsigned short id, const BroadcastType &broadcastType, int broadcastFD, StatusDTO statusDTO) {
+								 unsigned short id, const BroadcastType &broadcastType, int broadcastFD,
+								 StatusDTO statusDTO) {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
 	this->datagramController = datagramController;
@@ -87,7 +89,7 @@ void MessageReceiver::heartbeat() {
 				}
 			}
 			for (auto identifier : removes) {
-				std::lock_guard lock(*status.heartbeatsLock);
+				std::unique_lock lock(*status.heartbeatsLock);
 				if (status.order->count(identifier))
 					status.order->erase(identifier);
 				if (status.heartbeatsTimes->count(identifier))
@@ -142,6 +144,8 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	if ((request->datagram->isSYN() && request->datagram->isACK()) ||
 		(request->datagram->isFIN() && request->datagram->isACK()) || request->datagram->isACK() ||
 		request->datagram->isFIN()) {
+		if (request->datagram->isSYN() && request->datagram->isSYN() && broadcastType == AB) {
+		}
 		datagramController->insertDatagram(
 			{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}, request->datagram);
 		return;
@@ -166,7 +170,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 
 
 	Message *message = getMessage(request->datagram);
-	if (message != nullptr && message->delivered && request->datagram->getFlags() == 0) {
+	if (message != nullptr && (message->delivered && message->sent) && request->datagram->getFlags() == 0) {
 		sendDatagramFINACK(request, socketfd);
 		return;
 	}
@@ -188,6 +192,10 @@ void MessageReceiver::handleBroadcastMessage(Request *request, int socketfd) {
 			std::pair identifier = {datagram->getSourceAddress(), datagram->getSourcePort()};
 
 			if (!message->acks.contains(identifier) && datagram->isSYN()) {
+				if (broadcastType == AB) {
+					std::unique_lock stateLock(*status.heartbeatsLock);
+					message->order[identifier] = TypeUtils::buffToUnsignedInt(*message->getData(), 0);
+				}
 				message->acks[identifier] = false;
 			}
 			else if (!message->acks.contains(identifier) && datagram->isFIN()) {
@@ -217,26 +225,91 @@ void MessageReceiver::createMessage(Request *request, bool broadcast) {
 		messages[{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}] = message;
 	}
 }
+void MessageReceiver::consensusSYNACK(Request *request, int socketfd, unsigned order) {
+	request->datagram->setDataLength(4);
+	std::vector<unsigned char> bytes = std::vector<unsigned char>(4);
+	TypeUtils::uintToBytes(order, &bytes);
+	request->datagram->setData(bytes);
+	request->datagram->setDataLength(4);
+	sendDatagramSYNACK(request, socketfd);
+}
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool broadcast) {
 	if (broadcast && broadcastType == AB) {
-		channelMessageIP = request->datagram->getDestinAddress();
-		channelMessagePort = request->datagram->getDestinationPort();
-		sendHEARTBEAT(socketfd);
-		channelOccupied = true;
+		auto message = getMessage(request->datagram);
+		if (message == nullptr) {
+			createMessage(request, broadcast);
+			lastMessage++;
+			messageOrder[lastMessage] = getMessage(request->datagram);
+		}
+		else {
+			std::unique_lock stateLock(*status.heartbeatsLock);
+			const unsigned oldOrder = getOrder(request->datagram);
+			const unsigned order = message->getMajorityOrder(getMemberSize());
+			if (order == 0)
+				return;
+			if (messageOrder.contains(oldOrder)) {
+				messageOrder.erase(oldOrder);
+			}
+			messageOrder[order] = message;
+		}
+		consensusSYNACK(request, socketfd, lastMessage);
 	}
-	createMessage(request, broadcast);
-	sendDatagramSYNACK(request, socketfd);
+	else {
+		createMessage(request, broadcast);
+		sendDatagramSYNACK(request, socketfd);
+	}
+}
+
+unsigned MessageReceiver::getOrder(Datagram *datagram) {
+	Message *m = nullptr;
+	for (auto [identifier, message] : messages) {
+		if (identifier.first == datagram->getDestinAddress() && identifier.second == datagram->getDestinationPort()) {
+			m = message;
+		}
+	}
+	if (m != nullptr) {
+		for (auto [order, message] : messageOrder) {
+			if (message == m)
+				return order;
+		}
+	}
+	return 0;
+}
+
+unsigned short MessageReceiver::getMemberSize() {
+	unsigned short size = 0;
+	for (auto [member, status] : *status.nodeStatus) {
+		if (status == INITIALIZED)
+			size++;
+	}
+	return size;
 }
 
 void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
+	Logger::log(std::to_string(broadcastfd), LogLevel::FATAL);
+	unsigned int i = 1;
 	switch (broadcastType) {
 	case AB:
-		if (!message->faultyACK())
-			return;
-		channelOccupied = false;
-		message->delivered = true;
-		sendHEARTBEAT(broadcastfd);
-		messageQueue->push(std::make_pair(true, *message->getData()));
+		if (!message->faultyACK()) {
+			break;
+		}
+		while (true) {
+			std::shared_lock stateLock(*status.heartbeatsLock);
+			if (!messageOrder.contains(i)) {
+				break;
+			}
+			Message *m = messageOrder[i];
+			if (!m->faultyACK()) {
+				break;
+			}
+			if (m->delivered) {
+				i++;
+				continue;
+			}
+			m->delivered = true;
+			messageQueue->push(std::make_pair(true, *m->getData()));
+			i++;
+		}
 		break;
 	case URB:
 		if (!message->faultyACK() || message->delivered)
@@ -261,7 +334,7 @@ void MessageReceiver::handleBroadcastDataMessage(Request *request, int socketfd)
 	}
 	std::shared_lock messageLock(*message->getMutex());
 
-	if (message->delivered|| message->sent) {
+	if (message->delivered || message->sent) {
 		sendDatagramFINACK(request, socketfd);
 		return;
 	}

@@ -25,10 +25,8 @@ Datagram::Datagram(Datagram *datagram) {
 	setFlags(datagram->getFlags());
 	setChecksum(datagram->getChecksum());
 
-	auto dataPtr = datagram->getData();
-	getData()->reserve(dataPtr->size());
-	for (size_t i = 0; i < dataPtr->size(); ++i) {
-		(*getData())[i] = dataPtr->at(i);
+	for (auto uchar : *datagram->getData()) {
+		data.push_back(uchar);
 	}
 }
 
@@ -94,6 +92,8 @@ bool Datagram::isHEARTBEAT() { return this->isBitSet(this->getFlags(), 5); }
 
 bool Datagram::isEND() { return this->isBitSet(this->getFlags(), 10); }
 
+bool Datagram::isORDER() { return this->isBitSet(this->getFlags(), 6); }
+
 void Datagram::setIsACK() { this->setFlags(this->setBit(this->getFlags(), 0)); }
 
 void Datagram::setIsSYN() { this->setFlags(this->setBit(this->getFlags(), 1)); }
@@ -105,3 +105,4 @@ void Datagram::setIsBROADCAST() { this->setFlags(this->setBit(this->getFlags(), 
 void Datagram::setIsHEARTBEAT() { this->setFlags(this->setBit(this->getFlags(), 5)); }
 
 void Datagram::setIsEND() { this->setFlags(this->setBit(this->getFlags(), 10)); }
+void Datagram::setIsORDER() { this->setFlags(this->setBit(this->getFlags(), 6)); }
