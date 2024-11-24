@@ -1,0 +1,5 @@
+#pragma once
+#ifndef NODESTATUS_H
+#define NODESTATUS_H
+typedef enum NodeStatus { NOT_INITIALIZED, INITIALIZED, SUSPECT, DEFECTIVE, RECEIVING, SYNCHRONIZE } NodeStatus;
+#endif // NODESTATUS_H

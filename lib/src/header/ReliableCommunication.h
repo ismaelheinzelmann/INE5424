@@ -9,9 +9,10 @@
 #include "Datagram.h"
 #include "MessageReceiver.h"
 #include "MessageSender.h"
+#include "NodeStatus.h"
 
 #include "BroadcastType.h"
-
+#include "StatusStruct.h"
 #ifndef RELIABLE_H
 #define RELIABLE_H
 
@@ -46,9 +47,11 @@ private:
 	std::thread processingThread;
 	std::thread processingBroadcastThread;
 
+	StatusStruct statusStruct;
 	bool verifyOrigin(Datagram *datagram);
 	bool verifyOriginBroadcast(int requestSourcePort);
 	void processDatagram();
+	void configure();
 	static bool generateFault(std::vector<unsigned char> *data);
 	void processBroadcastDatagram();
 	static std::pair<int, sockaddr_in> createUDPSocketAndGetPort();

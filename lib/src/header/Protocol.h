@@ -8,6 +8,7 @@
 
 #include "Datagram.h"
 
+#include <NodeStatus.h>
 #include <Request.h>
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
@@ -30,6 +31,8 @@ public:
 	static void setFlags(Datagram *datagram, Flags *flags);
 	static void setBroadcast(Request *request);
 	static unsigned int sumChecksum32(const std::vector<unsigned char> *data);
+	static NodeStatus getNodeStatus(unsigned value);
+	static std::string getNodeStatusString(unsigned value);
 
 private:
 	// static thread_local std::atomic<bool> waitingTimeout;

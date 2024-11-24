@@ -8,6 +8,7 @@
 #include "DatagramController.h"
 
 #include "BroadcastType.h"
+#include "StatusStruct.h"
 
 #ifndef MESSAGESENDER_H
 #define MESSAGESENDER_H
@@ -16,7 +17,7 @@
 class MessageSender {
 public:
 	explicit MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr, DatagramController *datagramController,
-				  std::map<unsigned short, sockaddr_in> *configMap, BroadcastType broadcastType);
+				  std::map<unsigned short, sockaddr_in> *configMap, BroadcastType broadcastType, StatusStruct *statusStruct);
 
 	~MessageSender() = default;
 	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
@@ -32,6 +33,7 @@ private:
 	std::map<unsigned short, sockaddr_in> *configMap;
 	DatagramController *datagramController;
 	BroadcastType broadcastType;
+	StatusStruct *statusStruct;
 	std::pair<int, sockaddr_in> createUDPSocketAndGetPort();
 	bool verifyMessageAckedURB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);
 	bool verifyMessageAckedFaultyURB(std::map<std::pair<unsigned int, unsigned short>, bool> *membersAcks);

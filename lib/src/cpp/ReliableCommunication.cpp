@@ -1,7 +1,9 @@
 #include "../header/ReliableCommunication.h"
 
-#include "BroadcastType.h"
 #include <Logger.h>
+#include <TypeUtils.h>
+
+#include "BroadcastType.h"
 
 #include <cmath>
 #include <iostream>
@@ -20,7 +22,9 @@
 #include <cstring>
 #include <random>
 #include <thread>
+#include <set>
 #define PORT 8888
+#define JOIN_RETRY 5
 // #define BROADCAST_ADDRESS "255.255.255.255"
 
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID) {
@@ -70,10 +74,14 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 		throw std::runtime_error("Could not bind socket.");
 	}
 	// End Broadcast
-
-	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo);
-	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType);
-
+	for (size_t i = 0; i < this->configMap.size(); i++) {
+		auto config = this->configMap[i];
+		std::pair identifier = {config.sin_addr.s_addr, config.sin_port};
+		statusStruct.nodeStatus[identifier] = NOT_INITIALIZED;
+	}
+	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo, &statusStruct);
+	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType, &statusStruct);
+	configure();
 }
 
 ReliableCommunication::~ReliableCommunication() {
@@ -143,11 +151,11 @@ void ReliableCommunication::processBroadcastDatagram() {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
 		auto buffer = std::vector<unsigned char>(1048);
-		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer, faults.first, faults.second)) {
+		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer, faults.first,
+										  faults.second)) {
 			continue;
 		}
-		if (!verifyOriginBroadcast(datagram.getSourcePort()))
-		{
+		if (!verifyOriginBroadcast(datagram.getSourcePort())) {
 			Logger::log("Message of invalid process received.", LogLevel::DEBUG);
 			continue;
 		}
@@ -159,7 +167,7 @@ void ReliableCommunication::processBroadcastDatagram() {
 		}
 		senderAddr.sin_family = AF_INET;
 		auto request = Request{&buffer, &senderAddr, &datagram};
-		handler->handleBroadcastMessage(&request, this->broadcastInfo);
+		handler->handleBroadcastMessage(&request);
 	}
 }
 
@@ -172,31 +180,75 @@ void ReliableCommunication::printNodes(std::mutex *printLock) const {
 		std::cout << fst << std::endl;
 }
 
-BroadcastType ReliableCommunication::getBroadcastType() const
-{
-	return this->broadcastType;
-}
+BroadcastType ReliableCommunication::getBroadcastType() const { return this->broadcastType; }
 
-std::pair<int, int> ReliableCommunication::getFaults() const
-{
-	return this->faults;
-}
+std::pair<int, int> ReliableCommunication::getFaults() const { return this->faults; }
 
 
 bool ReliableCommunication::verifyOrigin(Datagram *datagram) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
-		if (datagram->getSourceAddress() == nodeAddr.sin_addr.s_addr && datagram->getSourcePort() == nodeAddr.sin_port) {
+		if (datagram->getSourceAddress() == nodeAddr.sin_addr.s_addr &&
+			datagram->getSourcePort() == nodeAddr.sin_port) {
 			return true;
 		}
 	}
 	return false;
 }
 
-bool ReliableCommunication::verifyOriginBroadcast( int requestSourcePort) {
+bool ReliableCommunication::verifyOriginBroadcast(int requestSourcePort) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
 		if (requestSourcePort == nodeAddr.sin_port) {
 			return true;
 		}
 	}
 	return false;
+}
+
+void ReliableCommunication::configure() {
+	Datagram joinDatagram = Datagram();
+	joinDatagram.setSourcePort(this->configMap[id].sin_port);
+	joinDatagram.setSourceAddress(this->configMap[id].sin_addr.s_addr);
+
+	Flags flags;
+	flags.JOIN = true;
+	std::set<std::pair<unsigned, unsigned short>> joinACKS;
+	unsigned messagesCounter = 0;
+
+	auto broadcastAddr = Protocol::broadcastAddress();
+	for (int i = 0; i < JOIN_RETRY; i++) {
+		Protocol::sendDatagram(&joinDatagram, &broadcastAddr, broadcastInfo, &flags);
+		while(true) {
+			// Grupo inteiro já concordou
+			// TODO Verificar o -1
+			if (joinACKS.size() == configMap.size() - 1)
+				break;
+			Datagram *response = datagramController.getDatagramTimeout(
+			{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 200);
+			if (response == nullptr)
+				break;
+			if (response->isJOIN() && response->isACK() && response->getData()->size() == 4) {
+				messagesCounter = TypeUtils::buffToUnsignedInt(*response->getData(), 0);
+				joinACKS.insert({response->getSourceAddress(), response->getSourcePort()});
+			}
+		}
+	}
+	// Nenhuma mensagem no grupo
+	if (messagesCounter == 0) {
+		statusStruct.nodeStatus[{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}] = INITIALIZED;
+		handler->configure();
+		return;
+	}
+	Datagram synchronizeDatagram = Datagram();
+	joinDatagram.setSourcePort(this->configMap[id].sin_port);
+	joinDatagram.setSourceAddress(this->configMap[id].sin_addr.s_addr);
+
+	flags.JOIN = false;
+	flags.SYNCHRONIZE = true;
+	while (handler->getBroadcastMessagesSize() != messagesCounter) {
+		//TODO Verificar se os nós ainda estão vivos, se não, break.
+		Protocol::sendDatagram(&synchronizeDatagram, &broadcastAddr, broadcastInfo, &flags);
+		std::this_thread::sleep_for(std::chrono::milliseconds(250));
+	}
+	statusStruct.nodeStatus[{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}] = INITIALIZED;
+	handler->configure();
 }

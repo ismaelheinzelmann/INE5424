@@ -8,6 +8,8 @@ struct Flags {
 	bool END = false;
 	bool BROADCAST = false;
 	bool HEARTBEAT = false;
+	bool JOIN = false;
+	bool SYNCHRONIZE = false;
 };
 
 #endif // FLAGS_H

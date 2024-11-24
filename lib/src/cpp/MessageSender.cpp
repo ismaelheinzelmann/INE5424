@@ -27,13 +27,14 @@
 
 MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
 							 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configMap,
-							 BroadcastType broadcastType) {
+							 BroadcastType broadcastType, StatusStruct *statusStruct) {
 	this->socketFD = socketFD;
 	this->broadcastFD = broadcastFD;
 	this->datagramController = datagramController;
 	this->configAddr = configIdAddr;
 	this->configMap = configMap;
 	this->broadcastType = broadcastType;
+	this->statusStruct = statusStruct;
 }
 
 void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
@@ -67,9 +68,14 @@ void MessageSender::buildBroadcastDatagrams(
 	in_port_t transientPort, unsigned short totalDatagrams, std::vector<unsigned char> &message,
 	std::map<std::pair<unsigned int, unsigned short>, bool> *members) {
 	std::map<unsigned short, bool> acknowledgments, responses;
-	for (auto [_, nodeAddr] : *this->configMap) {
-		(*members)[{nodeAddr.sin_addr.s_addr, nodeAddr.sin_port}] = false;
+	{
+		std::shared_lock lock(statusStruct->nodeStatusMutex);
+		for (auto [identifier, nodeStatus] : statusStruct->nodeStatus) {
+			if (nodeStatus == INITIALIZED)
+				(*members)[identifier] = false;
+		}
 	}
+
 	for (int i = 0; i < totalDatagrams; ++i) {
 		auto versionDatagram = Datagram();
 		versionDatagram.setSourceAddress(configAddr.sin_addr.s_addr);
@@ -206,17 +212,16 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 
 	sockaddr_in destin = Protocol::broadcastAddress();
 	auto members = std::map<std::pair<unsigned int, unsigned short>, bool>();
-	// unsigned short initialMembersSize = members.size();
-	if (!broadcastAckAttempts(destin, &datagram, &members)) {
-		close(transientSocketFd.first);
-		return false;
-	}
-
 	// build of datagrams
 	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
 	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> membersAcks;
 	buildBroadcastDatagrams(&datagrams, &membersAcks, transientSocketFd.second.sin_port, totalDatagrams, message,
 							&members);
+
+	if (!broadcastAckAttempts(destin, &datagram, &members)) {
+		close(transientSocketFd.first);
+		return false;
+	}
 
 	unsigned short batchSize = BATCH_SIZE;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
@@ -258,7 +263,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 			while (true) {
 				// Batch acordado, procede para o proximo batch
 				if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) &&
-					batchStart != batchCount-1) {
+					batchStart != batchCount - 1) {
 					break;
 				}
 				// Todos responderam FINACK
@@ -461,27 +466,33 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 	flags.SYN = true;
 	Protocol::setFlags(datagram, &flags);
 	auto buff = std::vector<unsigned char>(1048);
-
+	bool acked = true;
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
-		// Consensus
-		// if (broadcastType == AB && members->size() > configMap->size() / 2) {
-		// 	return true;
-		// }
-		if (members->size() == configMap->size()) {
-			break;
+		for (auto [_, ack] : *members) {
+			if (!ack) {
+				acked = false;
+				break;
+			}
 		}
+		if (acked)
+			break;
 		bool sent = Protocol::sendDatagram(datagram, &destin, broadcastFD, &flags);
 		if (!sent) {
 			Logger::log("Failed sending ACK datagram.", LogLevel::WARNING);
 			continue;
 		}
 		while (true) {
-			if (members->size() == configMap->size()) {
-				return true;
+			bool acked = true;
+			for (auto [_, ack] : *members) {
+				if (!ack) {
+					acked = false;
+					break;
+				}
 			}
-			Datagram *response =
-				datagramController->getDatagramTimeout({datagram->getSourceAddress(), datagram->getDestinationPort()},
-													   RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * i);
+			if (acked)
+				break;
+			Datagram *response = datagramController->getDatagramTimeout(
+				{datagram->getSourceAddress(), datagram->getDestinationPort()}, RETRY_ACK_TIMEOUT_USEC);
 			if (response == nullptr) {
 				break;
 			}
@@ -496,8 +507,13 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 			}
 		}
 	}
+	unsigned long totalAcks = 0;
+	for (auto [_, ack] : *members) {
+		if (ack)
+			totalAcks++;
+	}
 	// Diferença entre tamanho do grupo e tamanho de SYN-ACKS
-	const unsigned long f = configMap->size() - members->size();
+	const unsigned long f = members->size() - totalAcks;
 	// Para um processo falho, deve-se ter 3 processos corretos respondendo.
-	return members->size() >= 2 * f + 1;
+	return totalAcks >= 2 * f + 1;
 }

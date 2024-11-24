@@ -92,6 +92,10 @@ bool Datagram::isBROADCAST() { return this->isBitSet(this->getFlags(), 4); }
 
 bool Datagram::isHEARTBEAT() { return this->isBitSet(this->getFlags(), 5); }
 
+bool Datagram::isJOIN() { return this->isBitSet(this->getFlags(), 6); }
+
+bool Datagram::isSYNCHRONIZE() { return this->isBitSet(this->getFlags(), 7); }
+
 bool Datagram::isEND() { return this->isBitSet(this->getFlags(), 10); }
 
 void Datagram::setIsACK() { this->setFlags(this->setBit(this->getFlags(), 0)); }
@@ -103,5 +107,9 @@ void Datagram::setIsFIN() { this->setFlags(this->setBit(this->getFlags(), 3)); }
 void Datagram::setIsBROADCAST() { this->setFlags(this->setBit(this->getFlags(), 4)); }
 
 void Datagram::setIsHEARTBEAT() { this->setFlags(this->setBit(this->getFlags(), 5)); }
+
+void Datagram::setIsJOIN() { this->setFlags(this->setBit(this->getFlags(), 6)); }
+
+void Datagram::setIsSYNCHRONIZE() { this->setFlags(this->setBit(this->getFlags(), 7)); }
 
 void Datagram::setIsEND() { this->setFlags(this->setBit(this->getFlags(), 10)); }

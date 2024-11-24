@@ -1,6 +1,7 @@
 #include "../header/Protocol.h"
 
 #include <Logger.h>
+#include <NodeStatus.h>
 #include <Request.h>
 
 #include <future>
@@ -177,6 +178,45 @@ bool Protocol::sendDatagram(Datagram *datagram, sockaddr_in *to, int socketfd, F
 	return bytes == static_cast<ssize_t>(serializedDatagram.size());
 }
 
+NodeStatus Protocol::getNodeStatus(unsigned value) {
+	switch (value) {
+	case NOT_INITIALIZED:
+		return NOT_INITIALIZED;
+	case INITIALIZED:
+		return INITIALIZED;
+	case SUSPECT:
+		return SUSPECT;
+	case DEFECTIVE:
+		return DEFECTIVE;
+	case RECEIVING:
+		return RECEIVING;
+	case SYNCHRONIZE:
+		return SYNCHRONIZE;
+	default:
+		return NOT_INITIALIZED;
+	}
+}
+
+std::string Protocol::getNodeStatusString(unsigned value) {
+	switch (value) {
+	case NOT_INITIALIZED:
+		return "NOT_INITIALIZED";
+	case INITIALIZED:
+		return "INITIALIZED";
+	case SUSPECT:
+		return "SUSPECT";
+	case DEFECTIVE:
+		return "DEFECTIVE";
+	case RECEIVING:
+		return "RECEIVING";
+	case SYNCHRONIZE:
+		return "SYNCHRONIZE";
+	default:
+		return "NOT_INITIALIZED";
+	}
+}
+
+
 void Protocol::setFlags(Datagram *datagram, Flags *flags) {
 	if (flags->ACK)
 		datagram->setIsACK();
@@ -190,6 +230,10 @@ void Protocol::setFlags(Datagram *datagram, Flags *flags) {
 		datagram->setIsBROADCAST();
 	if (flags->HEARTBEAT)
 		datagram->setIsHEARTBEAT();
+	if (flags->JOIN)
+		datagram->setIsJOIN();
+	if (flags->SYNCHRONIZE)
+		datagram->setIsSYNCHRONIZE();
 }
 
 void Protocol::setBroadcast(Request *request) {
