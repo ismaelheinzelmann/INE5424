@@ -81,10 +81,10 @@ MessageReceiver::~MessageReceiver() {
 void MessageReceiver::heartbeat() {
 	while (running) {
 		{
-			if (status == NOT_INITIALIZED) {
-				std::this_thread::sleep_for(std::chrono::seconds(1));
-				continue;
-			}
+			// if (status == NOT_INITIALIZED) {
+			// 	std::this_thread::sleep_for(std::chrono::seconds(1));
+			// 	continue;
+			// }
 			sendHEARTBEAT({channelIP, channelPort}, broadcastFD);
 			std::this_thread::sleep_for(std::chrono::seconds(1));
 			std::vector<std::pair<unsigned int, unsigned short>> removes;
@@ -506,6 +506,15 @@ bool MessageReceiver::sendDatagramSYNACK(Request *request, int socketfd) {
 	return sent;
 }
 
+unsigned MessageReceiver::getBroadcastSize() {
+	unsigned size = 0;
+	for (auto message: broadcastOrder) {
+		if (message->delivered)
+			size++;
+	}
+	return size;
+}
+
 bool MessageReceiver::sendDatagramJOINACK(Request *request, int socketfd) {
 	auto datagramJOINACK = Datagram(request->datagram);
 	datagramJOINACK.setVersion(request->datagram->getVersion());
@@ -514,7 +523,7 @@ bool MessageReceiver::sendDatagramJOINACK(Request *request, int socketfd) {
 	sockaddr_in source = configs->at(id);
 	auto buff = std::vector<unsigned char>();
 	buff.resize(4);
-	TypeUtils::uintToBytes(this->broadcastOrder.size(), &buff);
+	TypeUtils::uintToBytes(getBroadcastSize(), &buff);
 	datagramJOINACK.setData(buff);
 	datagramJOINACK.setDataLength(4);
 	datagramJOINACK.setSourceAddress(source.sin_addr.s_addr);

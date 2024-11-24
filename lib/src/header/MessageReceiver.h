@@ -72,6 +72,7 @@ private:
 	static bool verifyMessage(Request *request);
 	void handleDataMessage(Request *request, int socketfd);
 	bool sendDatagramSYNACK(Request *request, int socketfd);
+	unsigned getBroadcastSize();
 	bool sendDatagramJOINACK(Request *request, int socketfd);
 	bool sendHEARTBEAT(std::pair<unsigned int, unsigned short>, int socketfd);
 	Message *getMessage(Datagram *datagram);

@@ -21,8 +21,8 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <random>
-#include <thread>
 #include <set>
+#include <thread>
 #define PORT 8888
 #define JOIN_RETRY 5
 // #define BROADCAST_ADDRESS "255.255.255.255"
@@ -80,8 +80,10 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 		std::pair identifier = {config.sin_addr.s_addr, config.sin_port};
 		statusStruct.nodeStatus[identifier] = NOT_INITIALIZED;
 	}
-	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo, &statusStruct);
-	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType, &statusStruct);
+	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo,
+								  &statusStruct);
+	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType,
+							   &statusStruct);
 	listen();
 	configure();
 }
@@ -186,10 +188,7 @@ BroadcastType ReliableCommunication::getBroadcastType() const { return this->bro
 
 std::pair<int, int> ReliableCommunication::getFaults() const { return this->faults; }
 
-int ReliableCommunication::getKeepAliveTime() const
-{
-	return this->keepAliveTime;
-}
+int ReliableCommunication::getKeepAliveTime() const { return this->keepAliveTime; }
 
 bool ReliableCommunication::verifyOrigin(Datagram *datagram) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
@@ -223,15 +222,14 @@ void ReliableCommunication::configure() {
 	auto broadcastAddr = Protocol::broadcastAddress();
 	datagramController.createQueue({configMap[id].sin_addr.s_addr, configMap[id].sin_port});
 	for (int i = 0; i < JOIN_RETRY; i++) {
-		Logger::log(std::to_string(datagramController.datagrams.size()) + " NO TRY", LogLevel::DEBUG);
 		Protocol::sendDatagram(&joinDatagram, &broadcastAddr, broadcastInfo, &flags);
-		while(true) {
+		while (true) {
 			// Grupo inteiro já concordou
 			// TODO Verificar o -1
 			if (joinACKS.size() == configMap.size() - 1)
 				break;
 			Datagram *response = datagramController.getDatagramTimeout(
-			{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 50);
+				{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 50);
 			if (response == nullptr)
 				break;
 			if (response->isJOIN() && response->isACK() && response->getData()->size() == 4) {
@@ -247,13 +245,25 @@ void ReliableCommunication::configure() {
 		return;
 	}
 	Datagram synchronizeDatagram = Datagram();
-	joinDatagram.setSourcePort(this->configMap[id].sin_port);
-	joinDatagram.setSourceAddress(this->configMap[id].sin_addr.s_addr);
+	synchronizeDatagram.setSourcePort(this->configMap[id].sin_port);
+	synchronizeDatagram.setSourceAddress(this->configMap[id].sin_addr.s_addr);
 
 	flags.JOIN = false;
 	flags.SYNCHRONIZE = true;
 	while (handler->getBroadcastMessagesSize() != messagesCounter) {
-		//TODO Verificar se os nós ainda estão vivos, se não, break.
+		bool channelAlive = true;
+		{
+			std::shared_lock lock(statusStruct.nodeStatusMutex);
+			for (auto [_, status] : statusStruct.nodeStatus) {
+				if (status == DEFECTIVE) {
+					channelAlive = false;
+				}
+			}
+		}
+		// Não há ninguem no canal
+		if (!channelAlive)
+			break;
+
 		Protocol::sendDatagram(&synchronizeDatagram, &broadcastAddr, broadcastInfo, &flags);
 		std::this_thread::sleep_for(std::chrono::milliseconds(250));
 	}
