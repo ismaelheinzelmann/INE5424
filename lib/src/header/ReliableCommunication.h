@@ -26,6 +26,7 @@ public:
 	bool sendBroadcast(std::vector<unsigned char> &data);
 	BroadcastType getBroadcastType() const;
 	std::pair<int, int> getFaults() const;
+	int getKeepAliveTime() const;
 	void stop();
 	void listen();
 	// If false, RC stoppend listen
@@ -34,6 +35,7 @@ public:
 private:
 	int socketInfo;
 	int broadcastInfo;
+	int keepAliveTime;
 	unsigned short id;
 	bool process = true;
 	MessageReceiver* handler;

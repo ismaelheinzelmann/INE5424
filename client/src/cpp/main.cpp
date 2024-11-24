@@ -40,7 +40,6 @@ int main(int argc, char *argv[])
 	const auto id = static_cast<unsigned short>(strtol(argv[1], nullptr, 10));
 	ReliableCommunication rb("../../../config/config", id);
 
-	rb.listen();
 	std::thread printThread(print, std::ref(rb));
 
 	while (g_running)

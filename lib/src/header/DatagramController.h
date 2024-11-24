@@ -16,10 +16,10 @@ public:
 	void insertDatagram(const std::pair<unsigned int, unsigned short> &identifier, Datagram *datagram);
 	void flush();
 	void deleteQueue(std::pair<unsigned int, unsigned short> identifier);
+	std::map<std::pair<unsigned int, unsigned short>, BlockingQueue<Datagram *> *> datagrams;
 
 private:
 	static thread_local std::atomic<bool> waitingTimeout;
-	std::map<std::pair<unsigned int, unsigned short>, BlockingQueue<Datagram *> *> datagrams;
 	std::shared_mutex datagramsMutex;
 
 	static void signalHandler(int);

@@ -24,12 +24,7 @@ Datagram::Datagram(Datagram *datagram) {
 	setDataLength(datagram->getDataLength());
 	setFlags(datagram->getFlags());
 	setChecksum(datagram->getChecksum());
-
-	auto dataPtr = datagram->getData();
-	getData()->reserve(dataPtr->size());
-	for (size_t i = 0; i < dataPtr->size(); ++i) {
-		(*getData())[i] = dataPtr->at(i);
-	}
+	setData(std::vector(datagram->getData()->begin(), datagram->getData()->end()));
 }
 
 void Datagram::setSourceAddress(unsigned int address) { this->sourceAddress = address; }

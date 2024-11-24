@@ -31,6 +31,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	this->configMap = ConfigParser::parseNodes(configFilePath);
 	this->broadcastType = ConfigParser::parseBroadcast(configFilePath);
 	this->faults = ConfigParser::parseFaults(configFilePath);
+	this->keepAliveTime = ConfigParser::parseKeepAlive(configFilePath);
 	this->id = nodeID;
 	if (this->configMap.find(id) == this->configMap.end()) {
 		throw std::runtime_error("Invalid ID.");
@@ -81,6 +82,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	}
 	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo, &statusStruct);
 	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType, &statusStruct);
+	listen();
 	configure();
 }
 
@@ -184,6 +186,10 @@ BroadcastType ReliableCommunication::getBroadcastType() const { return this->bro
 
 std::pair<int, int> ReliableCommunication::getFaults() const { return this->faults; }
 
+int ReliableCommunication::getKeepAliveTime() const
+{
+	return this->keepAliveTime;
+}
 
 bool ReliableCommunication::verifyOrigin(Datagram *datagram) {
 	for (const auto &[_, nodeAddr] : this->configMap) {
@@ -215,7 +221,9 @@ void ReliableCommunication::configure() {
 	unsigned messagesCounter = 0;
 
 	auto broadcastAddr = Protocol::broadcastAddress();
+	datagramController.createQueue({configMap[id].sin_addr.s_addr, configMap[id].sin_port});
 	for (int i = 0; i < JOIN_RETRY; i++) {
+		Logger::log(std::to_string(datagramController.datagrams.size()) + " NO TRY", LogLevel::DEBUG);
 		Protocol::sendDatagram(&joinDatagram, &broadcastAddr, broadcastInfo, &flags);
 		while(true) {
 			// Grupo inteiro já concordou
@@ -223,7 +231,7 @@ void ReliableCommunication::configure() {
 			if (joinACKS.size() == configMap.size() - 1)
 				break;
 			Datagram *response = datagramController.getDatagramTimeout(
-			{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 200);
+			{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 50);
 			if (response == nullptr)
 				break;
 			if (response->isJOIN() && response->isACK() && response->getData()->size() == 4) {

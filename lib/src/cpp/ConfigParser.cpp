@@ -143,3 +143,12 @@ std::pair<int, int> ConfigParser::parseFaults(const std::string &configFilePath)
 
 	return {drop, corrupt};
 }
+
+int ConfigParser::parseKeepAlive(const std::string &configFilePath) {
+	const std::string cleanFileString = cleanFile(configFilePath);
+	const std::string searchOption = "alive";
+	const size_t heartbeatStartPos = cleanFileString.find(searchOption) + searchOption.length();
+	const size_t equalSignPos = cleanFileString.find('=', heartbeatStartPos) + 1;
+	const size_t semicolonPos = cleanFileString.find(';', equalSignPos);
+	return std::stoi(cleanFileString.substr(equalSignPos, semicolonPos - equalSignPos));
+}

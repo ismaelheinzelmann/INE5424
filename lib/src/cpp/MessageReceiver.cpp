@@ -96,7 +96,7 @@ void MessageReceiver::heartbeat() {
 					statusStruct->nodeStatus[identifier] = DEFECTIVE;
 					// removes.emplace_back(identifier);
 				}
-				else if (std::chrono::system_clock::now() - time >= std::chrono::seconds(1) &&
+				else if (std::chrono::system_clock::now() - time >= std::chrono::seconds(2) &&
 						 statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = SUSPECT;
 				}
@@ -196,38 +196,40 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		return;
 	}
 	// É uma mensagem mas o nó ainda não esta inicializado
-	// if ((datagram->isJOIN() || datagram->isSYNCHRONIZE()) && status == NOT_INITIALIZED)
-	// 	return;
-	// // Recebeu concordância com join
-	// if (datagram->isJOIN() && datagram->isACK()) {
-	// 	datagramController->insertDatagram({datagram->getDestinAddress(), datagram->getDestinationPort()}, datagram);
-	// 	return;
-	// }
-	// if (datagram->isJOIN()) {
-	// 	// Is a self message
-	// 	if (datagram->getSourceAddress() == configs->at(id).sin_addr.s_addr &&
-	// 		datagram->getSourcePort() == configs->at(id).sin_port)
-	// 		return;
-	// 	// Someone is already entering the channel
-	// 	if (status == SYNCHRONIZE && datagram->getSourceAddress() != channelIP &&
-	// 		datagram->getSourcePort() != channelPort) {
-	// 		return;
-	// 	}
-	// 	sendDatagramJOINACK(request, broadcastFD);
-	// 	return;
-	// }
-	// if (datagram->isSYNCHRONIZE()) {
-	// 	auto smallestProcess = getSmallestProcess();
-	// 	// Não há processo configurado
-	// 	if (smallestProcess.first == 0 || smallestProcess.second == 0)
-	// 		return;
-	// 	// Este processo não deve responder a solicitação, pois não é o menor.
-	// 	if (smallestProcess.first != configs->at(id).sin_addr.s_addr &&
-	// 		smallestProcess.second != configs->at(id).sin_port) {
-	// 		return;
-	// 	}
-	// 	// TODO Fazer método de send heartbeat onde ele ja faz sozinha a parte de construir tudo e pegar o estado.
-	// }
+	if (datagram->isJOIN() && datagram->isSYNCHRONIZE() && status == NOT_INITIALIZED)
+		return;
+	// Recebeu concordância com join
+	if (datagram->isJOIN() && datagram->isACK()) {
+		datagramController->createQueue({datagram->getDestinAddress(), datagram->getDestinationPort()});
+		datagramController->insertDatagram({datagram->getDestinAddress(), datagram->getDestinationPort()}, datagram);
+		return;
+	}
+
+	if (datagram->isJOIN()) {
+		// Is a self message
+		if (datagram->getSourceAddress() == configs->at(id).sin_addr.s_addr &&
+			datagram->getSourcePort() == configs->at(id).sin_port)
+			return;
+		// Someone is already entering the channel
+		if (status == SYNCHRONIZE && datagram->getSourceAddress() != channelIP &&
+			datagram->getSourcePort() != channelPort) {
+			return;
+		}
+		sendDatagramJOINACK(request, broadcastFD);
+		return;
+	}
+	if (datagram->isSYNCHRONIZE()) {
+		auto smallestProcess = getSmallestProcess();
+		// Não há processo configurado
+		if (smallestProcess.first == 0 || smallestProcess.second == 0)
+			return;
+		// Este processo não deve responder a solicitação, pois não é o menor.
+		if (smallestProcess.first != configs->at(id).sin_addr.s_addr &&
+			smallestProcess.second != configs->at(id).sin_port) {
+			return;
+		}
+		// TODO Fazer método de send heartbeat onde ele ja faz sozinha a parte de construir tudo e pegar o estado.
+	}
 
 	Message *message = getBroadcastMessage(request->datagram);
 	if (message != nullptr && message->delivered && request->datagram->getFlags() == 0) {
@@ -334,14 +336,14 @@ std::pair<unsigned int, unsigned short> MessageReceiver::verifyConsensus() {
 }
 
 void MessageReceiver::createMessage(Request *request, bool broadcast) {
-	if (!messages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()})) {
+	if (!messages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}) &&
+		!broadcastMessages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()})) {
 		auto *message = new Message(request->datagram->getDatagramTotal());
 		if (broadcast) {
 			message->broadcastMessage = true;
 			broadcastMessages[{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}] =
 				message;
-			if (broadcastType == AB)
-				broadcastOrder.emplace_back(message);
+			broadcastOrder.emplace_back(message);
 			return;
 		}
 		messages[{request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}] = message;
@@ -514,6 +516,7 @@ bool MessageReceiver::sendDatagramJOINACK(Request *request, int socketfd) {
 	buff.resize(4);
 	TypeUtils::uintToBytes(this->broadcastOrder.size(), &buff);
 	datagramJOINACK.setData(buff);
+	datagramJOINACK.setDataLength(4);
 	datagramJOINACK.setSourceAddress(source.sin_addr.s_addr);
 	datagramJOINACK.setSourcePort(source.sin_port);
 
@@ -521,7 +524,8 @@ bool MessageReceiver::sendDatagramJOINACK(Request *request, int socketfd) {
 	flags.JOIN = true;
 	flags.ACK = true;
 	Protocol::setFlags(&datagramJOINACK, &flags);
-	bool sent = Protocol::sendDatagram(&datagramJOINACK, request->clientRequest, socketfd, &flags);
+	auto broadcastaddr = Protocol::broadcastAddress();
+	bool sent = Protocol::sendDatagram(&datagramJOINACK, &broadcastaddr, socketfd, &flags);
 	return sent;
 }
 
