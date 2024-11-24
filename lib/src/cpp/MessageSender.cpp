@@ -71,7 +71,7 @@ void MessageSender::buildBroadcastDatagrams(
 	{
 		std::shared_lock lock(statusStruct->nodeStatusMutex);
 		for (auto [identifier, nodeStatus] : statusStruct->nodeStatus) {
-			if (nodeStatus == INITIALIZED)
+			if (nodeStatus != NOT_INITIALIZED && nodeStatus != DEFECTIVE)
 				(*members)[identifier] = false;
 		}
 	}
@@ -145,9 +145,8 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 					   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
 			}
 			while (true) {
-				int timeoutMS = std::min(RETRY_ACK_TIMEOUT_USEC + RETRY_ACK_TIMEOUT_USEC * attempt, 800);
 				Datagram *response = datagramController->getDatagramTimeout(
-					{datagram.getSourceAddress(), datagram.getDestinationPort()}, timeoutMS);
+					{datagram.getSourceAddress(), datagram.getDestinationPort()}, RETRY_ACK_TIMEOUT_USEC);
 				if (response == nullptr)
 					break;
 				// Resposta de outro batch, pode ser descartada.
@@ -271,9 +270,8 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 					close(transientSocketFd.first);
 					return true;
 				}
-				int timeoutMS = std::min(RETRY_ACK_TIMEOUT_USEC + 100 * attempt, 500);
 				Datagram *response = datagramController->getDatagramTimeout(
-					{datagram.getSourceAddress(), datagram.getDestinationPort()}, timeoutMS);
+					{datagram.getSourceAddress(), datagram.getDestinationPort()}, RETRY_ACK_TIMEOUT_USEC);
 				if (response == nullptr)
 					break;
 				auto identifier = std::make_pair(response->getSourceAddress(), response->getSourcePort());
@@ -500,7 +498,7 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 				for (auto [_, addr] : *configMap) {
 					if (addr.sin_addr.s_addr == datagram->getSourceAddress() &&
 						addr.sin_port == datagram->getSourcePort()) {
-						(*members)[{response->getSourceAddress(), response->getSourcePort()}] = false;
+						(*members)[{response->getSourceAddress(), response->getSourcePort()}] = true;
 						break;
 					}
 				}
@@ -508,9 +506,11 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 		}
 	}
 	unsigned long totalAcks = 0;
-	for (auto [_, ack] : *members) {
-		if (ack)
+	for (auto [identifier, ack] : *members) {
+		if (ack) {
 			totalAcks++;
+			(*members)[identifier] = false;
+		}
 	}
 	// Diferença entre tamanho do grupo e tamanho de SYN-ACKS
 	const unsigned long f = members->size() - totalAcks;

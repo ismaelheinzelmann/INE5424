@@ -1,6 +1,7 @@
 #ifndef BLOCKING_QUEUE_H
 #define BLOCKING_QUEUE_H
 
+#include "Logger.h"
 #include <mutex>
 #include <queue>
 #include <semaphore>

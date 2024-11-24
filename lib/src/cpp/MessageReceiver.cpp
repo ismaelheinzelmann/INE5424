@@ -96,7 +96,7 @@ void MessageReceiver::heartbeat() {
 					statusStruct->nodeStatus[identifier] = DEFECTIVE;
 					// removes.emplace_back(identifier);
 				}
-				else if (std::chrono::system_clock::now() - time >= std::chrono::seconds(2) &&
+				else if (std::chrono::system_clock::now() - time >= std::chrono::seconds(1) &&
 						 statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = SUSPECT;
 				}
@@ -196,38 +196,38 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		return;
 	}
 	// É uma mensagem mas o nó ainda não esta inicializado
-	if ((datagram->isJOIN() || datagram->isSYNCHRONIZE()) && status == NOT_INITIALIZED)
-		return;
-	// Recebeu concordância com join
-	if (datagram->isJOIN() && datagram->isACK()) {
-		datagramController->insertDatagram({datagram->getDestinAddress(), datagram->getDestinationPort()}, datagram);
-		return;
-	}
-	if (datagram->isJOIN()) {
-		// Is a self message
-		if (datagram->getSourceAddress() == configs->at(id).sin_addr.s_addr &&
-			datagram->getSourcePort() == configs->at(id).sin_port)
-			return;
-		// Someone is already entering the channel
-		if (status == SYNCHRONIZE && datagram->getSourceAddress() != channelIP &&
-			datagram->getSourcePort() != channelPort) {
-			return;
-		}
-		sendDatagramJOINACK(request, broadcastFD);
-		return;
-	}
-	if (datagram->isSYNCHRONIZE()) {
-		auto smallestProcess = getSmallestProcess();
-		// Não há processo configurado
-		if (smallestProcess.first == 0 || smallestProcess.second == 0)
-			return;
-		// Este processo não deve responder a solicitação, pois não é o menor.
-		if (smallestProcess.first != configs->at(id).sin_addr.s_addr &&
-			smallestProcess.second != configs->at(id).sin_port) {
-			return;
-		}
-		// TODO Fazer método de send heartbeat onde ele ja faz sozinha a parte de construir tudo e pegar o estado.
-	}
+	// if ((datagram->isJOIN() || datagram->isSYNCHRONIZE()) && status == NOT_INITIALIZED)
+	// 	return;
+	// // Recebeu concordância com join
+	// if (datagram->isJOIN() && datagram->isACK()) {
+	// 	datagramController->insertDatagram({datagram->getDestinAddress(), datagram->getDestinationPort()}, datagram);
+	// 	return;
+	// }
+	// if (datagram->isJOIN()) {
+	// 	// Is a self message
+	// 	if (datagram->getSourceAddress() == configs->at(id).sin_addr.s_addr &&
+	// 		datagram->getSourcePort() == configs->at(id).sin_port)
+	// 		return;
+	// 	// Someone is already entering the channel
+	// 	if (status == SYNCHRONIZE && datagram->getSourceAddress() != channelIP &&
+	// 		datagram->getSourcePort() != channelPort) {
+	// 		return;
+	// 	}
+	// 	sendDatagramJOINACK(request, broadcastFD);
+	// 	return;
+	// }
+	// if (datagram->isSYNCHRONIZE()) {
+	// 	auto smallestProcess = getSmallestProcess();
+	// 	// Não há processo configurado
+	// 	if (smallestProcess.first == 0 || smallestProcess.second == 0)
+	// 		return;
+	// 	// Este processo não deve responder a solicitação, pois não é o menor.
+	// 	if (smallestProcess.first != configs->at(id).sin_addr.s_addr &&
+	// 		smallestProcess.second != configs->at(id).sin_port) {
+	// 		return;
+	// 	}
+	// 	// TODO Fazer método de send heartbeat onde ele ja faz sozinha a parte de construir tudo e pegar o estado.
+	// }
 
 	Message *message = getBroadcastMessage(request->datagram);
 	if (message != nullptr && message->delivered && request->datagram->getFlags() == 0) {
@@ -402,6 +402,7 @@ void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 	default:
 		if (message->delivered)
 			return;
+		status = INITIALIZED;
 		message->delivered = true;
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;
