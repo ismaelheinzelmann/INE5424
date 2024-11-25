@@ -81,7 +81,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 		statusStruct.nodeStatus[identifier] = NOT_INITIALIZED;
 	}
 	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType,
-						   &statusStruct);
+							   &statusStruct);
 	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo,
 								  &statusStruct, sender, keepAliveTime);
 
@@ -230,11 +230,10 @@ void ReliableCommunication::configure() {
 		Protocol::sendDatagram(&joinDatagram, &broadcastAddr, broadcastInfo, &flags);
 		while (true) {
 			// Grupo inteiro já concordou
-			// TODO Verificar o -1
 			if (joinACKS.size() == configMap.size() - 1)
 				break;
 			Datagram *response = datagramController.getDatagramTimeout(
-				{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 50);
+				{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 200);
 			if (response == nullptr)
 				break;
 			if (response->isJOIN() && response->isACK() && response->getData()->size() == 4) {

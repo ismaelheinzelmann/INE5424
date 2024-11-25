@@ -65,22 +65,22 @@ void MessageReceiver::heartbeat() {
 	while (running) {
 		{
 			sendHEARTBEAT({channelIP, channelPort}, broadcastFD);
-			std::this_thread::sleep_for(std::chrono::milliseconds(1*aliveTimeMS));
+			std::this_thread::sleep_for(std::chrono::milliseconds(1 * aliveTimeMS));
 			std::vector<std::pair<unsigned int, unsigned short>> removes;
 			std::lock_guard lock(statusStruct->nodeStatusMutex);
 			for (auto [identifier, time] : heartbeatsTimes) {
 				auto oldStatus = statusStruct->nodeStatus[identifier];
-				if (std::chrono::system_clock::now() - time >= std::chrono::milliseconds(3*aliveTimeMS) &&
+				if (std::chrono::system_clock::now() - time >= std::chrono::milliseconds(3 * aliveTimeMS) &&
 					statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = DEFECTIVE;
 					// removes.emplace_back(identifier);
 				}
-				else if (std::chrono::system_clock::now() - time >= std::chrono::milliseconds(2*aliveTimeMS) &&
+				else if (std::chrono::system_clock::now() - time >= std::chrono::milliseconds(2 * aliveTimeMS) &&
 						 statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = SUSPECT;
 				}
 				if (oldStatus != statusStruct->nodeStatus[identifier]) {
-					Logger::log("New status for node: " +
+					Logger::log("New status for node " + std::to_string((*configs)[id].sin_port) + ": " +
 									Protocol::getNodeStatusString(statusStruct->nodeStatus[identifier]),
 								LogLevel::DEBUG);
 				}
@@ -98,11 +98,7 @@ void MessageReceiver::synchronize() {
 					if (!message->delivered)
 						continue;
 					auto data = *message->getData();
-					if (!sender->synchronizeBroadcast(data, identifier, {channelIP, channelPort}, m->origin)) {
-						synchronizing = false;
-						status = INITIALIZED;
-						return;
-					}
+					sender->synchronizeBroadcast(data, identifier, {channelIP, channelPort}, m->origin);
 				}
 			}
 		}
@@ -173,7 +169,10 @@ void MessageReceiver::treatHeartbeat(Datagram *datagram) {
 	auto oldStatus = statusStruct->nodeStatus[{datagram->getSourceAddress(), datagram->getSourcePort()}];
 
 	if (oldStatus != status) {
-		Logger::log("New status for node: " + Protocol::getNodeStatusString(statusInt), LogLevel::DEBUG);
+		Logger::log("New status for node " + std::to_string(datagram->getSourcePort()) + ": " +
+						Protocol::getNodeStatusString(
+							statusStruct->nodeStatus[{datagram->getSourceAddress(), datagram->getSourcePort()}]),
+					LogLevel::DEBUG);
 	}
 	(statusStruct->nodeStatus)[{datagram->getSourceAddress(), datagram->getSourcePort()}] = status;
 }
@@ -200,19 +199,14 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		return;
 	}
 
-	if (datagram->isJOIN()) {
-		// Is a self message
-		if (datagram->getSourceAddress() == configs->at(id).sin_addr.s_addr &&
-			datagram->getSourcePort() == configs->at(id).sin_port)
-			return;
+	if (datagram->isJOIN() && status != NOT_INITIALIZED) {
 		// Someone is already entering the channel
 		if (status == SYNCHRONIZE &&
 			(datagram->getSourceAddress() != channelIP || datagram->getSourcePort() != channelPort)) {
 
 			std::shared_lock statusLock(statusStruct->nodeStatusMutex);
 			// Se o nó em sincronização morreu substitui o nó
-			if (statusStruct->nodeStatus[{channelIP, channelPort}] != DEFECTIVE &&
-				statusStruct->nodeStatus[{channelPort, channelIP}] != INITIALIZED) {
+			if (statusStruct->nodeStatus[{channelIP, channelPort}] == NOT_INITIALIZED) {
 				return;
 			}
 		}
@@ -263,21 +257,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 			// Consenso espera alguma coisa
 			if ((consent.first != 0 || consent.second != 0) &&
 				(consent.first != channelMessageID.first || consent.second != channelMessageID.second)) {
-				if (messages.contains(consent)) {
-					std::shared_lock messageLock(*messages[consent]->getMutex());
-					// Mensagem anterior não foi finalizada e recebeu um timeout, logo substitui a mensagem aceita.
-					if (!messages[consent]->delivered &&
-						messages[consent]->getLastUpdate() - std::chrono::system_clock::now() >
-							std::chrono::seconds(3)) {
-
-						channelIP = consent.first;
-						channelPort = consent.second;
-					}
-					else {
-						// Mensagem anterior não foi finalizada, porém ainda não tomou timeout
-						return;
-					}
-				}
+				return;
 			}
 		}
 		// }
@@ -360,11 +340,17 @@ void MessageReceiver::createMessage(Request *request, bool broadcast) {
 	}
 }
 void MessageReceiver::handleFirstMessage(Request *request, int socketfd, bool broadcast) {
+	if (messages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()}) &&
+		!broadcastMessages.contains({request->datagram->getDestinAddress(), request->datagram->getDestinationPort()})) {
+		sendDatagramSYNACK(request, socketfd);
+		return;
+	}
 	if (broadcast && broadcastType == AB) {
 		channelIP = request->datagram->getDestinAddress();
 		channelPort = request->datagram->getDestinationPort();
 		sendHEARTBEAT({channelIP, channelPort}, socketfd);
-		status = RECEIVING;
+		if (status != NOT_INITIALIZED && status != SYNCHRONIZE)
+			status = RECEIVING;
 	}
 	createMessage(request, broadcast);
 	sendDatagramSYNACK(request, socketfd);
@@ -409,6 +395,7 @@ void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 	case URB:
 		if (!message->messageACK() || message->delivered)
 			return;
+		status = INITIALIZED;
 		message->delivered = true;
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;
