@@ -1,7 +1,6 @@
 #ifndef BLOCKING_QUEUE_H
 #define BLOCKING_QUEUE_H
 
-#include "Logger.h"
 #include <mutex>
 #include <queue>
 #include <semaphore>
@@ -14,6 +13,7 @@ public:
 
 	void push(T value);
 	T pop();
+	T popWithTimeout(std::chrono::milliseconds timeout);
 
 private:
 	std::mutex mutex_;
@@ -46,5 +46,25 @@ T BlockingQueue<T>::pop() {
 	queue_.pop();
 	return value;
 }
+
+template <typename T>
+T BlockingQueue<T>::popWithTimeout(std::chrono::milliseconds timeout) {
+	// Try to acquire the semaphore within the timeout period
+	if (!semaphore.try_acquire_for(timeout)) {
+		throw std::runtime_error("Timeout while waiting for an item in the queue");
+	}
+
+	std::lock_guard<std::mutex> lock(mutex_);
+
+	// Check if the queue is empty after acquiring the semaphore
+	if (queue_.empty()) {
+		throw std::runtime_error("Queue is empty");
+	}
+
+	T value = std::move(queue_.front());
+	queue_.pop();
+	return value;
+}
+
 
 #endif // BLOCKING_QUEUE_H

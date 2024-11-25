@@ -80,10 +80,11 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 		std::pair identifier = {config.sin_addr.s_addr, config.sin_port};
 		statusStruct.nodeStatus[identifier] = NOT_INITIALIZED;
 	}
-	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo,
-								  &statusStruct);
 	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType,
-							   &statusStruct);
+						   &statusStruct);
+	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo,
+								  &statusStruct, sender);
+
 	listen();
 	configure();
 }
@@ -127,6 +128,10 @@ void ReliableCommunication::listen() {
 }
 
 void ReliableCommunication::processDatagram() {
+	// sigset_t newmask;
+	// sigemptyset(&newmask);
+	// sigaddset(&newmask, SIGALRM);
+	// pthread_sigmask(SIG_BLOCK, &newmask, nullptr);
 	while (true) {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};

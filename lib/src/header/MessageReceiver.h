@@ -19,13 +19,16 @@
 
 #include "BroadcastType.h"
 
+#include "MessageSender.h"
+
 
 // Thread that verifies every N seconds and remove requisitions that timedout;
 class MessageReceiver {
 public:
 	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 					DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
-					unsigned short id, const BroadcastType &broadcastType, int broadcastFD, StatusStruct *statusStruct);
+					unsigned short id, const BroadcastType &broadcastType, int broadcastFD, StatusStruct *statusStruct,
+					MessageSender *sender);
 	~MessageReceiver();
 	void stop();
 	void handleMessage(Request *request, int socketfd);
@@ -42,13 +45,16 @@ private:
 	std::vector<Message*> broadcastOrder;
 	std::shared_mutex messagesMutex;
 	BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue;
-	std::thread cleanseThread;
+	// std::thread cleanseThread;
 	std::thread heartbeatThread;
+	std::thread synchronyzeThread;
+	std::atomic_bool synchronizing;
 	StatusStruct *statusStruct;
 	NodeStatus status = NOT_INITIALIZED;
 	DatagramController *datagramController;
 	unsigned short id;
 	int broadcastFD;
+	MessageSender *sender;
 
 
 	// Atomic
@@ -82,6 +88,7 @@ private:
 	bool sendDatagramFIN(Request *request, int socketfd);
 	void cleanse();
 	void heartbeat();
+	void synchronize();
 };
 
 

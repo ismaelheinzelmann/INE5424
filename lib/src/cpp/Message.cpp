@@ -13,7 +13,16 @@ Message::Message(unsigned short totalDatagrams) {
 
 Message::~Message() { delete data; }
 
-bool Message::allACK() {
+bool Message::allACK(unsigned short groupSize) {
+	unsigned long finAcks = 0;
+	for (const auto ack : acks | std::views::values)
+		if (ack)
+			finAcks++;
+	const unsigned int f = groupSize - finAcks;
+	return finAcks >= 2 * f + 1;
+}
+
+bool Message::messageACK() {
 	unsigned long finAcks = 0;
 	for (const auto ack : acks | std::views::values)
 		if (ack)

@@ -21,6 +21,13 @@ public:
 
 	~MessageSender() = default;
 	bool sendMessage(sockaddr_in &destin, std::vector<unsigned char> &message);
+	bool broadcast(std::vector<unsigned char> &message, std::pair<int, sockaddr_in> identifier);
+	void buildSynchronizeDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
+								   std::map<unsigned short, bool> *acknowledgments, unsigned short totalDatagrams,
+								   std::vector<unsigned char> &message, std::pair<unsigned, unsigned short> origin,
+								   std::pair<unsigned, unsigned short> identifier);
+	bool synchronizeBroadcast(std::vector<unsigned char> &message, std::pair<unsigned, unsigned short> identifier,
+							  std::pair<unsigned, unsigned short> target, std::pair<unsigned, unsigned short> origin);
 	bool sendBroadcast(std::vector<unsigned char> &message);
 	static void removeFailed(
 		std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
@@ -46,6 +53,8 @@ private:
 		std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> *membersAcks,
 		unsigned short batchSize, unsigned short batchIndex, unsigned short totalDatagrams);
 	static unsigned short calculateTotalDatagrams(unsigned int dataLength);
+	bool synchronizeAckAttempts(sockaddr_in &destin, Datagram *datagram,
+								std::pair<unsigned int, unsigned short> target);
 
 	void buildDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
 						std::map<unsigned short, bool> *acknowledgments,

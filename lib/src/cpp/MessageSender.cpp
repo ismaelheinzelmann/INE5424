@@ -17,12 +17,8 @@
 #include <thread>
 
 #define RETRY_ACK_ATTEMPT 6
-#define RETRY_ACK_TIMEOUT_USEC 200
-
+#define RETRY_ACK_TIMEOUT_USEC 50
 #define RETRY_DATA_ATTEMPT 8
-#define RETRY_DATA_TIMEOUT_USEC 100
-#define RETRY_DATA_TIMEOUT_USEC_MAX 800
-#define TIMEOUT_INCREMENT 200
 #define BATCH_SIZE 30
 
 MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
@@ -195,30 +191,26 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 	return acks == totalDatagrams;
 }
 
-bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
-
-	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
-
+bool MessageSender::broadcast(std::vector<unsigned char> &message, std::pair<int, sockaddr_in> identifier) {
 	auto datagram = Datagram();
 	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
 	datagram.setDatagramTotal(totalDatagrams);
 	datagram.setSourceAddress(configAddr.sin_addr.s_addr);
 	datagram.setSourcePort(configAddr.sin_port);
-	datagram.setDestinationPort(transientSocketFd.second.sin_port);
+	datagram.setDestinationPort(identifier.second.sin_port);
 	datagram.setDestinAddress(configAddr.sin_addr.s_addr);
 
-	datagramController->createQueue({configAddr.sin_addr.s_addr, transientSocketFd.second.sin_port});
+	datagramController->createQueue({configAddr.sin_addr.s_addr, identifier.second.sin_port});
 
 	sockaddr_in destin = Protocol::broadcastAddress();
 	auto members = std::map<std::pair<unsigned int, unsigned short>, bool>();
 	// build of datagrams
 	auto datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
 	std::map<std::pair<unsigned int, unsigned short>, std::map<unsigned short, std::pair<bool, bool>>> membersAcks;
-	buildBroadcastDatagrams(&datagrams, &membersAcks, transientSocketFd.second.sin_port, totalDatagrams, message,
-							&members);
+	buildBroadcastDatagrams(&datagrams, &membersAcks, identifier.second.sin_port, totalDatagrams, message, &members);
 
 	if (!broadcastAckAttempts(destin, &datagram, &members)) {
-		close(transientSocketFd.first);
+		close(identifier.first);
 		return false;
 	}
 
@@ -229,7 +221,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
 		unsigned short batchIndex;
 		if (verifyMessageAckedURB(&members)) {
-			close(transientSocketFd.first);
+			close(identifier.first);
 			return true;
 		}
 		for (int attempt = 0; attempt < RETRY_DATA_ATTEMPT; attempt++) {
@@ -238,7 +230,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 				break;
 			}
 			if (verifyMessageAckedURB(&members)) {
-				close(transientSocketFd.first);
+				close(identifier.first);
 				return true;
 			}
 
@@ -267,7 +259,7 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 				}
 				// Todos responderam FINACK
 				if (verifyMessageAckedURB(&members)) {
-					close(transientSocketFd.first);
+					close(identifier.first);
 					return true;
 				}
 				Datagram *response = datagramController->getDatagramTimeout(
@@ -302,8 +294,134 @@ bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
 			break;
 		}
 	}
-	close(transientSocketFd.first);
+	close(identifier.first);
 	return broadcastType == BEB ? verifyMessageAckedBEB(&members) : verifyMessageAckedFaultyURB(&members);
+}
+
+
+void MessageSender::buildSynchronizeDatagrams(std::vector<std::vector<unsigned char>> *datagrams,
+								   std::map<unsigned short, bool> *acknowledgments,
+								   unsigned short totalDatagrams, std::vector<unsigned char> &message,
+								   std::pair<unsigned, unsigned short> origin, std::pair<unsigned, unsigned short> identifier) {
+	for (int i = 0; i < totalDatagrams; ++i) {
+		auto versionDatagram = Datagram();
+		versionDatagram.setSourceAddress(origin.first);
+		versionDatagram.setSourcePort(origin.second);
+		versionDatagram.setDestinationPort(identifier.second);
+		versionDatagram.setDestinAddress(identifier.first);
+		versionDatagram.setVersion(i + 1);
+		versionDatagram.setDatagramTotal(totalDatagrams);
+		for (unsigned short j = 0; j < 1024; j++) {
+			const unsigned int index = i * 1024 + j;
+			if (index >= message.size())
+				break;
+			versionDatagram.getData()->push_back(message.at(index));
+		}
+		versionDatagram.setDataLength(versionDatagram.getData()->size());
+		auto serializedDatagram = Protocol::serialize(&versionDatagram);
+		Protocol::setChecksum(&serializedDatagram);
+		(*datagrams)[i] = serializedDatagram;
+		(*acknowledgments)[i] = false;
+	}
+}
+
+bool MessageSender::synchronizeBroadcast(std::vector<unsigned char> &message,
+										 std::pair<unsigned, unsigned short> identifier,
+										 std::pair<unsigned, unsigned short> target,
+										 std::pair<unsigned, unsigned short> origin) {
+	auto datagram = Datagram();
+	unsigned short totalDatagrams = calculateTotalDatagrams(message.size());
+	datagram.setDatagramTotal(totalDatagrams);
+	datagram.setSourceAddress(origin.first);
+	datagram.setSourcePort(origin.second);
+	datagram.setDestinationPort(identifier.second);
+	datagram.setDestinAddress(identifier.first);
+	datagramController->createQueue({identifier.first, identifier.second});
+	auto destin = Protocol::broadcastAddress();
+	bool accepted = synchronizeAckAttempts(destin, &datagram, target);
+	if (!accepted) {
+		return false;
+	}
+	// build of datagrams
+	std::vector<std::vector<unsigned char>> datagrams = std::vector<std::vector<unsigned char>>(totalDatagrams);
+	std::map<unsigned short, bool> acknowledgments;
+	buildSynchronizeDatagrams(&datagrams, &acknowledgments, totalDatagrams, message, origin, identifier);
+
+	unsigned short batchSize = BATCH_SIZE, sent = 0, acks = 0;
+	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
+	std::vector<unsigned char> buff = std::vector<unsigned char>(1048);
+	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
+		unsigned short batchIndex, batchAck = 0;
+		if (sent == totalDatagrams) {
+			return true;
+		}
+		for (int attempt = 0; attempt < RETRY_DATA_ATTEMPT; attempt++) {
+			if (batchAck == batchSize || acks == totalDatagrams)
+				break;
+
+			for (unsigned short j = 0; j < batchSize; j++) {
+				batchIndex = batchStart * batchSize + j;
+				if (batchIndex >= totalDatagrams)
+					break;
+				if (acknowledgments[batchIndex])
+					continue;
+				sendto(broadcastFD, datagrams[batchIndex].data(), datagrams[batchIndex].size(), 0,
+					   reinterpret_cast<sockaddr *>(&destin), sizeof(destin));
+			}
+			while (true) {
+				Datagram *response = datagramController->getDatagramTimeout(
+					{datagram.getSourceAddress(), datagram.getDestinationPort()}, 100);
+
+				if (response == nullptr)
+					break;
+				if (response->getSourceAddress() != target.first || response->getDestinationPort() != target.second)
+					continue;
+				// Resposta de outro batch, pode ser descartada.
+				if (response->getVersion() - 1 < batchStart * batchSize ||
+					response->getVersion() - 1 > (batchStart * batchSize) + batchSize) {
+					Logger::log("Received old response.", LogLevel::DEBUG);
+					continue;
+				}
+				// Armazena informação de ACK recebido.
+				if (response->getVersion() - 1 <= totalDatagrams && response->isACK() &&
+					!acknowledgments[response->getVersion() - 1]) {
+					Logger::log("Datagram of version " + std::to_string(response->getVersion()) + " accepted.",
+								LogLevel::DEBUG);
+					acknowledgments[response->getVersion() - 1] = true;
+					batchAck++;
+					sent++;
+					acks++;
+				}
+
+				// Conexão finalizada, com ou sem sucesso.
+				if (response->isACK() && response->isFIN()) {
+					Logger::log("Peer ended connection with success at receiving message.", LogLevel::DEBUG);
+					return true;
+				}
+				if (response->isFIN()) {
+					Logger::log("Peer ended connection.", LogLevel::DEBUG);
+					return false;
+				}
+
+				// Batch acordado, procede para o proximo batch
+				if (batchAck == batchSize) {
+					Logger::log("Batch " + std::to_string(batchStart + 1) + " aknowledged.", LogLevel::DEBUG);
+					break;
+				}
+			}
+		}
+		// No final de uma tentativa, verifica se todo o batch foi acordado. Caso não, encerra o fluxo de envio.
+		// Caso tenha finalizado de acordar todos os datagramas, finaliza o fluxo.
+		if (batchAck != batchSize || acks == totalDatagrams) {
+			break;
+		}
+	}
+	return acks == totalDatagrams;
+}
+
+bool MessageSender::sendBroadcast(std::vector<unsigned char> &message) {
+	std::pair<int, sockaddr_in> transientSocketFd = createUDPSocketAndGetPort();
+	return broadcast(message, transientSocketFd);
 }
 
 void MessageSender::removeFailed(
@@ -429,6 +547,36 @@ unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength) {
 	return static_cast<int>(ceil(result));
 }
 
+bool MessageSender::synchronizeAckAttempts(sockaddr_in &destin, Datagram *datagram,
+										   std::pair<unsigned, unsigned short> target) {
+	Flags flags;
+	flags.SYN = true;
+	Protocol::setFlags(datagram, &flags);
+	auto buff = std::vector<unsigned char>(1048);
+
+	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
+		bool sent = Protocol::sendDatagram(datagram, &destin, broadcastFD, &flags);
+		if (!sent) {
+			Logger::log("Failed sending ACK datagram.", LogLevel::WARNING);
+			continue;
+		}
+		Datagram *response = datagramController->getDatagramTimeout(
+			{datagram->getSourceAddress(), datagram->getDestinationPort()}, RETRY_ACK_TIMEOUT_USEC);
+
+		if (response == nullptr) {
+			Logger::log("ACK Timedout.", LogLevel::WARNING);
+			continue;
+		}
+		if (response->getSourceAddress() != target.first || response->getSourcePort() != target.second)
+			continue;
+		if (response->isACK())
+			return true;
+	}
+	Logger::log("ACK failed.", LogLevel::WARNING);
+
+	return false;
+}
+
 bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram) {
 	Flags flags;
 	flags.SYN = true;
@@ -449,7 +597,9 @@ bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram) {
 			Logger::log("ACK Timedout.", LogLevel::WARNING);
 			continue;
 		}
-		if (response->isACK() && response->isSYN() && datagram->getVersion() == response->getVersion()) {
+		if (response->isACK() && response->isSYN() && datagram->getVersion() == response->getVersion() &&
+			response->getSourceAddress() == destin.sin_addr.s_addr &&
+			response->getDestinationPort() == destin.sin_port) {
 			return true;
 		}
 	}

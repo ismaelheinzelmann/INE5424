@@ -24,7 +24,10 @@ public:
 	bool delivered = false;
 	bool broadcastMessage = false;
 	std::map<std::pair<unsigned int, unsigned short>, bool> acks;
-	bool allACK();
+	bool allACK(unsigned short groupSize);
+	bool messageACK();
+	std::pair<unsigned, unsigned short> origin;
+
 
 
 private:

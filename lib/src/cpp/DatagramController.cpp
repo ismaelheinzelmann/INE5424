@@ -2,9 +2,13 @@
 
 #include <Logger.h>
 #include <atomic>
+#include <chrono>
 #include <csetjmp>
 #include <csignal>
 #include <fcntl.h>
+#include <future>
+#include <memory>
+#include <shared_mutex>
 thread_local jmp_buf jumpBuffer;
 
 void DatagramController::createQueue(std::pair<unsigned int, unsigned short> identifier) {
@@ -22,31 +26,23 @@ void DatagramController::signalHandler(int) {
 }
 
 Datagram *DatagramController::getDatagramTimeout(const std::pair<unsigned int, unsigned short> &identifier,
-												 int timeoutMS) {
+												  int timeoutMS) {
+	BlockingQueue<Datagram *> *datagramResource;
+
 	{
 		std::shared_lock lock(datagramsMutex);
-		if (!datagrams.contains(identifier)) {
+		auto it = datagrams.find(identifier);
+		if (it == datagrams.end()) {
 			return nullptr;
 		}
+		datagramResource = it->second;
 	}
-	sigset_t newmask, oldmask;
-	sigemptyset(&newmask);
-	sigaddset(&newmask, SIGALRM);
-	pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
-	if (setjmp(jumpBuffer) != 0) {
-		pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
-		ualarm(0, 0);
+
+	try {
+		return datagramResource->popWithTimeout(std::chrono::milliseconds(timeoutMS));
+	} catch (const std::runtime_error &e) {
 		return nullptr;
 	}
-	std::signal(SIGALRM, signalHandler);
-	waitingTimeout.store(true);
-	pthread_sigmask(SIG_UNBLOCK, &newmask, nullptr);
-	ualarm(timeoutMS*1000, 0);
-	Datagram *datagram = datagrams.at(identifier)->pop();
-	pthread_sigmask(SIG_SETMASK, &oldmask, nullptr);
-	waitingTimeout.store(false);
-	ualarm(0, 0);
-	return datagram;
 }
 
 thread_local std::atomic<bool> DatagramController::waitingTimeout = false;
