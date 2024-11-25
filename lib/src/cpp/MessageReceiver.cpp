@@ -58,14 +58,10 @@ MessageReceiver::~MessageReceiver() {
 
 // TODO change res
 void MessageReceiver::heartbeat() {
-	sigset_t newmask;
-	sigemptyset(&newmask);
-	sigaddset(&newmask, SIGALRM);
-	pthread_sigmask(SIG_BLOCK, &newmask, nullptr);
 	while (running) {
 		{
 			sendHEARTBEAT({channelIP, channelPort}, broadcastFD);
-			std::this_thread::sleep_for(std::chrono::milliseconds(1 * aliveTimeMS));
+			std::this_thread::sleep_for(std::chrono::milliseconds(aliveTimeMS));
 			std::vector<std::pair<unsigned int, unsigned short>> removes;
 			std::lock_guard lock(statusStruct->nodeStatusMutex);
 			for (auto [identifier, time] : heartbeatsTimes) {
@@ -85,6 +81,10 @@ void MessageReceiver::heartbeat() {
 								LogLevel::DEBUG);
 				}
 			}
+			if (status == SYNCHRONIZE && statusStruct->nodeStatus[{channelIP, channelPort}] != NOT_INITIALIZED) {
+				Logger::log("Not synchronizing anymore", LogLevel::DEBUG);
+				status = INITIALIZED;
+			}
 		}
 	}
 }
@@ -103,7 +103,6 @@ void MessageReceiver::synchronize() {
 			}
 		}
 	}
-	status = INITIALIZED;
 	synchronizing = false;
 }
 
@@ -159,9 +158,6 @@ void MessageReceiver::handleMessage(Request *request, int socketfd) {
 	}
 }
 
-// Se for um JOIN e o canal não estiver SYNCHRONIZE, pode dale (menos criar uma nova mensagem)
-// De qualquer modo, verificar se o mesmo que tem que enviar as mensagenss
-
 void MessageReceiver::treatHeartbeat(Datagram *datagram) {
 	unsigned statusInt = TypeUtils::buffToUnsignedInt(*datagram->getData(), 0);
 	NodeStatus status = Protocol::getNodeStatus(statusInt);
@@ -170,8 +166,7 @@ void MessageReceiver::treatHeartbeat(Datagram *datagram) {
 
 	if (oldStatus != status) {
 		Logger::log("New status for node " + std::to_string(datagram->getSourcePort()) + ": " +
-						Protocol::getNodeStatusString(
-							statusStruct->nodeStatus[{datagram->getSourceAddress(), datagram->getSourcePort()}]),
+						Protocol::getNodeStatusString(status),
 					LogLevel::DEBUG);
 	}
 	(statusStruct->nodeStatus)[{datagram->getSourceAddress(), datagram->getSourcePort()}] = status;
@@ -189,6 +184,14 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		treatHeartbeat(request->datagram);
 		return;
 	}
+
+	{
+		std::shared_lock statusLock(statusStruct->nodeStatusMutex);
+		if (status == SYNCHRONIZE && statusStruct->nodeStatus[{channelIP, channelPort}] != NOT_INITIALIZED) {
+			status = INITIALIZED;
+		}
+	}
+
 	// É uma mensagem mas o nó ainda não esta inicializado
 	if (datagram->isSYNCHRONIZE() && status == NOT_INITIALIZED)
 		return;
@@ -216,8 +219,6 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		return;
 	}
 	if (datagram->isSYNCHRONIZE()) {
-		if (status != SYNCHRONIZE) {
-		}
 		auto smallestProcess = getSmallestProcess();
 		// Não há processo configurado
 		if (smallestProcess.first == 0 || smallestProcess.second == 0)
@@ -227,12 +228,13 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 			smallestProcess.second != configs->at(id).sin_port) {
 			return;
 		}
+		status = SYNCHRONIZE;
 		// Não há thread dedicada para recepção.
 		if (!synchronizing) {
 			synchronyzeThread = std::thread([this] { synchronize(); });
 			synchronyzeThread.detach();
-			return;
 		}
+		return;
 	}
 
 	// Não possui nenhuma mensagem esperada
