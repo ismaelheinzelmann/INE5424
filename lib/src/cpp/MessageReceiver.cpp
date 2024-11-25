@@ -1,15 +1,15 @@
 #include "../header/MessageReceiver.h"
 
-#include "NodeStatus.h"
-#include "TypeUtils.h"
 #include <map>
 #include <shared_mutex>
 #include "BlockingQueue.h"
 #include "BroadcastType.h"
 #include "Datagram.h"
 #include "Logger.h"
+#include "NodeStatus.h"
 #include "Protocol.h"
 #include "Request.h"
+#include "TypeUtils.h"
 
 
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
@@ -69,12 +69,12 @@ void MessageReceiver::heartbeat() {
 			std::lock_guard lock(statusStruct->nodeStatusMutex);
 			for (auto [identifier, time] : heartbeatsTimes) {
 				auto oldStatus = statusStruct->nodeStatus[identifier];
-				if (std::chrono::system_clock::now() - time >= std::chrono::seconds(100) &&
+				if (std::chrono::system_clock::now() - time >= std::chrono::seconds(3) &&
 					statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = DEFECTIVE;
 					// removes.emplace_back(identifier);
 				}
-				else if (std::chrono::system_clock::now() - time >= std::chrono::seconds(100) &&
+				else if (std::chrono::system_clock::now() - time >= std::chrono::seconds(2) &&
 						 statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = SUSPECT;
 				}
@@ -89,29 +89,24 @@ void MessageReceiver::heartbeat() {
 }
 
 void MessageReceiver::synchronize() {
-	auto myid = std::this_thread::get_id();
-	std::stringstream ss;
-	ss << myid;
-	std::string mystring = ss.str();
-	Logger::log(mystring, LogLevel::DEBUG);
-
 	synchronizing = true;
-	for (auto message: broadcastOrder) {
+	for (auto message : broadcastOrder) {
 		if (message->delivered) {
-			for (auto [identifier, m]: broadcastMessages) {
+			for (auto [identifier, m] : broadcastMessages) {
 				if (m == message) {
 					if (!message->delivered)
 						continue;
 					auto data = *message->getData();
 					if (!sender->synchronizeBroadcast(data, identifier, {channelIP, channelPort}, m->origin)) {
 						synchronizing = false;
+						status = INITIALIZED;
 						return;
 					}
 				}
 			}
-
 		}
 	}
+	status = INITIALIZED;
 	synchronizing = false;
 }
 
@@ -222,13 +217,15 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		}
 		channelIP = datagram->getSourceAddress();
 		channelPort = datagram->getSourcePort();
-		status = SYNCHRONIZE;
 		sendDatagramJOINACK(request, broadcastFD);
 		return;
 	}
 	if (datagram->isSYNCHRONIZE()) {
-		if (status != SYNCHRONIZE){}
+		if (status != SYNCHRONIZE) {
+		}
 		auto smallestProcess = getSmallestProcess();
+		Logger::log("IP: " + std::to_string(smallestProcess.first) + " PORT: " + std::to_string(smallestProcess.second),
+					LogLevel::DEBUG);
 		// Não há processo configurado
 		if (smallestProcess.first == 0 || smallestProcess.second == 0)
 			return;
@@ -251,39 +248,39 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 	}
 
 	// Não possui nenhuma mensagem esperada
-	if (broadcastType == AB && status != SYNCHRONIZE && status != NOT_INITIALIZED) {
+	if (broadcastType == AB && status == RECEIVING) {
 		// Cria uma mensagem mesmo que não vá ser utilizada para posterior consenso
 		if (datagram->getFlags() == 2) {
 			createMessage(request, broadcastFD);
 		}
 		// Caso haja alguma mensagem esperada
-		if (status == RECEIVING) {
-			std::pair messageID = {request->datagram->getDestinAddress(), request->datagram->getDestinationPort()};
-			// Se a mensagem recebida for diferente da esperada
-			if (channelIP != messageID.first || channelPort != messageID.second) {
-				std::pair<unsigned int, unsigned short> channelMessageID = {channelIP, channelPort};
-				std::pair consent = verifyConsensus();
-				// Consenso espera alguma coisa
-				if ((consent.first != 0 || consent.second != 0) &&
-					(consent.first != channelMessageID.first || consent.second != channelMessageID.second)) {
-					if (messages.contains(consent)) {
-						std::shared_lock messageLock(*messages[consent]->getMutex());
-						// Mensagem anterior não foi finalizada e recebeu um timeout, logo substitui a mensagem aceita.
-						if (!messages[consent]->delivered &&
-							messages[consent]->getLastUpdate() - std::chrono::system_clock::now() >
-								std::chrono::seconds(3)) {
+		// if (status == RECEIVING) {
+		std::pair messageID = {request->datagram->getDestinAddress(), request->datagram->getDestinationPort()};
+		// Se a mensagem recebida for diferente da esperada
+		if (channelIP != messageID.first || channelPort != messageID.second) {
+			std::pair<unsigned int, unsigned short> channelMessageID = {channelIP, channelPort};
+			std::pair consent = verifyConsensus();
+			// Consenso espera alguma coisa
+			if ((consent.first != 0 || consent.second != 0) &&
+				(consent.first != channelMessageID.first || consent.second != channelMessageID.second)) {
+				if (messages.contains(consent)) {
+					std::shared_lock messageLock(*messages[consent]->getMutex());
+					// Mensagem anterior não foi finalizada e recebeu um timeout, logo substitui a mensagem aceita.
+					if (!messages[consent]->delivered &&
+						messages[consent]->getLastUpdate() - std::chrono::system_clock::now() >
+							std::chrono::seconds(3)) {
 
-							channelIP = consent.first;
-							channelPort = consent.second;
-						}
-						else {
-							// Mensagem anterior não foi finalizada, porém ainda não tomou timeout
-							return;
-						}
+						channelIP = consent.first;
+						channelPort = consent.second;
+					}
+					else {
+						// Mensagem anterior não foi finalizada, porém ainda não tomou timeout
+						return;
 					}
 				}
 			}
 		}
+		// }
 	}
 	// Data datagram
 	if (datagram->getFlags() == 0) {
@@ -543,6 +540,10 @@ bool MessageReceiver::sendDatagramJOINACK(Request *request, int socketfd) {
 	datagramJOINACK.setSourceAddress(source.sin_addr.s_addr);
 	datagramJOINACK.setSourcePort(source.sin_port);
 
+	if (getBroadcastSize() != 0) {
+		status = SYNCHRONIZE;
+		Logger::log("Não zero", LogLevel::DEBUG);
+	}
 	Flags flags;
 	flags.JOIN = true;
 	flags.ACK = true;
@@ -574,7 +575,7 @@ bool MessageReceiver::sendHEARTBEAT(std::pair<unsigned int, unsigned short> targ
 }
 
 void MessageReceiver::configure() {
-	status = INITIALIZED; //TODO send heartbeat
+	status = INITIALIZED; // TODO send heartbeat
 }
 
 unsigned MessageReceiver::getBroadcastMessagesSize() {
