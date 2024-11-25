@@ -28,7 +28,7 @@ public:
 	MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 					DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
 					unsigned short id, const BroadcastType &broadcastType, int broadcastFD, StatusStruct *statusStruct,
-					MessageSender *sender);
+					MessageSender *sender, int aliveMS);
 	~MessageReceiver();
 	void stop();
 	void handleMessage(Request *request, int socketfd);
@@ -54,6 +54,7 @@ private:
 	DatagramController *datagramController;
 	unsigned short id;
 	int broadcastFD;
+	int aliveTimeMS;
 	MessageSender *sender;
 
 

@@ -15,7 +15,7 @@
 MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsigned char>>> *messageQueue,
 								 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configs,
 								 unsigned short id, const BroadcastType &broadcastType, int broadcastFD,
-								 StatusStruct *statusStruct, MessageSender *sender) {
+								 StatusStruct *statusStruct, MessageSender *sender, int aliveMS) {
 	this->messages = std::map<std::pair<in_addr_t, in_port_t>, Message *>();
 	this->messageQueue = messageQueue;
 	this->datagramController = datagramController;
@@ -29,6 +29,7 @@ MessageReceiver::MessageReceiver(BlockingQueue<std::pair<bool, std::vector<unsig
 	this->broadcastFD = broadcastFD;
 	this->statusStruct = statusStruct;
 	this->sender = sender;
+	this->aliveTimeMS = aliveMS;
 }
 
 MessageReceiver::~MessageReceiver() {
@@ -64,17 +65,17 @@ void MessageReceiver::heartbeat() {
 	while (running) {
 		{
 			sendHEARTBEAT({channelIP, channelPort}, broadcastFD);
-			std::this_thread::sleep_for(std::chrono::seconds(1));
+			std::this_thread::sleep_for(std::chrono::milliseconds(1*aliveTimeMS));
 			std::vector<std::pair<unsigned int, unsigned short>> removes;
 			std::lock_guard lock(statusStruct->nodeStatusMutex);
 			for (auto [identifier, time] : heartbeatsTimes) {
 				auto oldStatus = statusStruct->nodeStatus[identifier];
-				if (std::chrono::system_clock::now() - time >= std::chrono::seconds(3) &&
+				if (std::chrono::system_clock::now() - time >= std::chrono::milliseconds(3*aliveTimeMS) &&
 					statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = DEFECTIVE;
 					// removes.emplace_back(identifier);
 				}
-				else if (std::chrono::system_clock::now() - time >= std::chrono::seconds(2) &&
+				else if (std::chrono::system_clock::now() - time >= std::chrono::milliseconds(2*aliveTimeMS) &&
 						 statusStruct->nodeStatus[identifier] != NOT_INITIALIZED) {
 					statusStruct->nodeStatus[identifier] = SUSPECT;
 				}
@@ -224,8 +225,6 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		if (status != SYNCHRONIZE) {
 		}
 		auto smallestProcess = getSmallestProcess();
-		Logger::log("IP: " + std::to_string(smallestProcess.first) + " PORT: " + std::to_string(smallestProcess.second),
-					LogLevel::DEBUG);
 		// Não há processo configurado
 		if (smallestProcess.first == 0 || smallestProcess.second == 0)
 			return;
@@ -234,6 +233,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 			smallestProcess.second != configs->at(id).sin_port) {
 			return;
 		}
+		// Não há thread dedicada para recepção.
 		if (!synchronizing) {
 			synchronyzeThread = std::thread([this] { synchronize(); });
 			synchronyzeThread.detach();
@@ -542,7 +542,6 @@ bool MessageReceiver::sendDatagramJOINACK(Request *request, int socketfd) {
 
 	if (getBroadcastSize() != 0) {
 		status = SYNCHRONIZE;
-		Logger::log("Não zero", LogLevel::DEBUG);
 	}
 	Flags flags;
 	flags.JOIN = true;

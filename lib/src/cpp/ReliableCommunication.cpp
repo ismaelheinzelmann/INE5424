@@ -83,7 +83,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	sender = new MessageSender(socketInfo, broadcastInfo, addr, &datagramController, &configMap, broadcastType,
 						   &statusStruct);
 	handler = new MessageReceiver(&messageQueue, &datagramController, &configMap, id, broadcastType, broadcastInfo,
-								  &statusStruct, sender);
+								  &statusStruct, sender, keepAliveTime);
 
 	listen();
 	configure();
