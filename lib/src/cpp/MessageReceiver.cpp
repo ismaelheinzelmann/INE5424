@@ -235,12 +235,6 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		}
 	}
 
-	Message *message = getBroadcastMessage(request->datagram);
-	if (message != nullptr && message->delivered && request->datagram->getFlags() == 0) {
-		sendDatagramFINACK(request, broadcastFD);
-		return;
-	}
-
 	// Não possui nenhuma mensagem esperada
 	if (broadcastType == AB && status == RECEIVING) {
 		// Cria uma mensagem mesmo que não vá ser utilizada para posterior consenso
@@ -248,7 +242,6 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 			createMessage(request, broadcastFD);
 		}
 		// Caso haja alguma mensagem esperada
-		// if (status == RECEIVING) {
 		std::pair messageID = {request->datagram->getDestinAddress(), request->datagram->getDestinationPort()};
 		// Se a mensagem recebida for diferente da esperada
 		if (channelIP != messageID.first || channelPort != messageID.second) {
@@ -260,7 +253,6 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 				return;
 			}
 		}
-		// }
 	}
 	// Data datagram
 	if (datagram->getFlags() == 0) {
@@ -293,7 +285,7 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 		datagramController->insertDatagram({datagram->getDestinAddress(), datagram->getDestinationPort()}, datagram);
 		return;
 	}
-	if (datagram->isSYN() && (status == INITIALIZED || status == NOT_INITIALIZED)) {
+	if (datagram->isSYN()) {
 		handleFirstMessage(request, broadcastFD, true);
 	}
 }
@@ -387,22 +379,31 @@ void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 	case AB:
 		if (!message->messageACK())
 			return;
-		status = INITIALIZED;
-		message->delivered = true;
-		sendHEARTBEAT({0, 0}, broadcastfd);
-		messageQueue->push(std::make_pair(true, *message->getData()));
+		if (status != SYNCHRONIZE && status != NOT_INITIALIZED)
+			status = INITIALIZED;
+		for (auto m : broadcastOrder) {
+			if (!m->sent)
+				break;
+			if (m->sent && !m->delivered) {
+				m->delivered = true;
+				sendHEARTBEAT({0, 0}, broadcastfd);
+				messageQueue->push(std::make_pair(true, *m->getData()));
+			}
+		}
 		break;
 	case URB:
 		if (!message->messageACK() || message->delivered)
 			return;
-		status = INITIALIZED;
+		if (status != SYNCHRONIZE && status != NOT_INITIALIZED)
+			status = INITIALIZED;
 		message->delivered = true;
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;
 	default:
 		if (message->delivered)
 			return;
-		status = INITIALIZED;
+		if (status != SYNCHRONIZE && status != NOT_INITIALIZED)
+			status = INITIALIZED;
 		message->delivered = true;
 		messageQueue->push(std::make_pair(true, *message->getData()));
 		break;

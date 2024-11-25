@@ -34,7 +34,7 @@ make .debug
 For running the client, you can use the following command:
 
 ```
-./client <node_id> 
+cd client/build/bin && ./client <node_id> 
 ```
 
 #### Logging
@@ -42,11 +42,12 @@ For running the client, you can use the following command:
 You can also define a Log Level, for example:
 
 ```
-./client <node_id> DEBUG
+cd client/build/bin && ./client <node_id> DEBUG
 ```
 
 The full list of Log levels is:
 - INFO
+- FAULT
 - DEBUG
 - WARNING
 - ERROR

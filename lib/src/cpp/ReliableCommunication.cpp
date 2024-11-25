@@ -24,7 +24,7 @@
 #include <set>
 #include <thread>
 #define PORT 8888
-#define JOIN_RETRY 5
+#define JOIN_RETRY 6
 // #define BROADCAST_ADDRESS "255.255.255.255"
 
 ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigned short nodeID) {
@@ -233,7 +233,7 @@ void ReliableCommunication::configure() {
 			if (joinACKS.size() == configMap.size() - 1)
 				break;
 			Datagram *response = datagramController.getDatagramTimeout(
-				{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 200);
+				{this->configMap[id].sin_addr.s_addr, this->configMap[id].sin_port}, 100);
 			if (response == nullptr)
 				break;
 			if (response->isJOIN() && response->isACK() && response->getData()->size() == 4) {
