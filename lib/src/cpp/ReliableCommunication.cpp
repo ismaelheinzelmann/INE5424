@@ -55,7 +55,7 @@ ReliableCommunication::ReliableCommunication(std::string configFilePath, unsigne
 	memset(&broadcastAddr, 0, sizeof(broadcastAddr));
 	broadcastAddr.sin_family = AF_INET;
 	broadcastAddr.sin_port = htons(PORT);
-	broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
+	broadcastAddr.sin_addr.s_addr = inet_addr("127.255.255.255");
 
 	// Allow multiple sockets to bind to the same port
 	int opt = 1;

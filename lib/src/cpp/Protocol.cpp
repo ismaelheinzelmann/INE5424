@@ -4,12 +4,14 @@
 #include <NodeStatus.h>
 #include <Request.h>
 
+#include <arpa/inet.h>
 #include <future>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <vector>
-#include "TypeUtils.h"
+
 #include "FaultInjector.h"
+#include "TypeUtils.h"
 
 #include "../header/Flags.h"
 // Serializes data and computes the checksum while doing so.
@@ -248,6 +250,6 @@ sockaddr_in Protocol::broadcastAddress() {
 	sockaddr_in broadcastAddr{};
 	broadcastAddr.sin_family = AF_INET;
 	broadcastAddr.sin_port = htons(8888); // Should be sent to all ports
-	broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
+	broadcastAddr.sin_addr.s_addr = inet_addr("127.255.255.255");
 	return broadcastAddr;
 }

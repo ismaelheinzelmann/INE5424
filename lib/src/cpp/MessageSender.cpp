@@ -210,6 +210,7 @@ bool MessageSender::broadcast(std::vector<unsigned char> &message, std::pair<int
 	buildBroadcastDatagrams(&datagrams, &membersAcks, identifier.second.sin_port, totalDatagrams, message, &members);
 
 	if (!broadcastAckAttempts(destin, &datagram, &members)) {
+		Logger::log("FAILED IN ACK", LogLevel::INFO);
 		close(identifier.first);
 		return false;
 	}
@@ -226,7 +227,7 @@ bool MessageSender::broadcast(std::vector<unsigned char> &message, std::pair<int
 		}
 		for (int attempt = 0; attempt < RETRY_DATA_ATTEMPT; attempt++) {
 			Logger::log("Retry", LogLevel::DEBUG);
-			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams) && batchIndex != batchCount) {
+			if (verifyBatchAcked(&membersAcks, batchSize, batchStart, totalDatagrams)) {
 				break;
 			}
 			if (verifyMessageAckedURB(&members)) {

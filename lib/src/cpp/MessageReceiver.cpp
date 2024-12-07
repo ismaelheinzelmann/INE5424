@@ -252,7 +252,12 @@ void MessageReceiver::handleBroadcastMessage(Request *request) {
 			// Consenso espera alguma coisa
 			if ((consent.first != 0 || consent.second != 0) &&
 				(consent.first != channelMessageID.first || consent.second != channelMessageID.second)) {
-				return;
+				if (messages.contains(messageID)) {
+					auto consentMessage = messages[messageID];
+					if (consentMessage->getLastUpdate() - std::chrono::system_clock::now() < std::chrono::seconds(1)) {
+						return;
+					}
+				}
 			}
 		}
 	}
@@ -383,15 +388,15 @@ void MessageReceiver::deliverBroadcast(Message *message, int broadcastfd) {
 			return;
 		if (status != SYNCHRONIZE && status != NOT_INITIALIZED)
 			status = INITIALIZED;
-		for (auto m : broadcastOrder) {
-			if (!m->sent)
-				break;
-			if (m->sent && !m->delivered) {
-				m->delivered = true;
-				sendHEARTBEAT({0, 0}, broadcastfd);
-				messageQueue->push(std::make_pair(true, *m->getData()));
-			}
+		// for (auto m : broadcastOrder) {
+		if (!message->sent)
+			break;
+		if (message->sent && !message->delivered) {
+			message->delivered = true;
+			sendHEARTBEAT({0, 0}, broadcastfd);
+			messageQueue->push(std::make_pair(true, *message->getData()));
 		}
+		// }
 		break;
 	case URB:
 		if (!message->messageACK() || message->delivered)
