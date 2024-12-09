@@ -19,7 +19,7 @@
 #define RETRY_ACK_ATTEMPT 6
 #define RETRY_ACK_TIMEOUT_USEC 50
 #define RETRY_DATA_ATTEMPT 8
-#define BATCH_SIZE 30
+#define BATCH_SIZE 100
 
 MessageSender::MessageSender(int socketFD, int broadcastFD, sockaddr_in configIdAddr,
 							 DatagramController *datagramController, std::map<unsigned short, sockaddr_in> *configMap,
@@ -44,8 +44,8 @@ void MessageSender::buildDatagrams(std::vector<std::vector<unsigned char>> *data
 		versionDatagram.setDestinAddress(configAddr.sin_addr.s_addr);
 		versionDatagram.setVersion(i + 1);
 		versionDatagram.setDatagramTotal(totalDatagrams);
-		for (unsigned short j = 0; j < 1024; j++) {
-			const unsigned int index = i * 1024 + j;
+		for (unsigned short j = 0; j < 2024; j++) {
+			const unsigned int index = i * 2024 + j;
 			if (index >= message.size())
 				break;
 			versionDatagram.getData()->push_back(message.at(index));
@@ -80,8 +80,8 @@ void MessageSender::buildBroadcastDatagrams(
 		versionDatagram.setDestinAddress(configAddr.sin_addr.s_addr);
 		versionDatagram.setVersion(i + 1);
 		versionDatagram.setDatagramTotal(totalDatagrams);
-		for (unsigned short j = 0; j < 1024; j++) {
-			const unsigned int index = i * 1024 + j;
+		for (unsigned short j = 0; j < 2024; j++) {
+			const unsigned int index = i * 2024 + j;
 			if (index >= message.size())
 				break;
 			versionDatagram.getData()->push_back(message.at(index));
@@ -120,7 +120,7 @@ bool MessageSender::sendMessage(sockaddr_in &destin, std::vector<unsigned char> 
 
 	unsigned short batchSize = BATCH_SIZE, sent = 0, acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
-	std::vector<unsigned char> buff = std::vector<unsigned char>(1048);
+	std::vector<unsigned char> buff = std::vector<unsigned char>(2048);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
 		unsigned short batchIndex, batchAck = 0;
 		if (sent == totalDatagrams) {
@@ -217,7 +217,7 @@ bool MessageSender::broadcast(std::vector<unsigned char> &message, std::pair<int
 
 	unsigned short batchSize = BATCH_SIZE;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
-	auto buff = std::vector<unsigned char>(1048);
+	auto buff = std::vector<unsigned char>(2048);
 
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
 		unsigned short batchIndex;
@@ -312,8 +312,8 @@ void MessageSender::buildSynchronizeDatagrams(std::vector<std::vector<unsigned c
 		versionDatagram.setDestinAddress(identifier.first);
 		versionDatagram.setVersion(i + 1);
 		versionDatagram.setDatagramTotal(totalDatagrams);
-		for (unsigned short j = 0; j < 1024; j++) {
-			const unsigned int index = i * 1024 + j;
+		for (unsigned short j = 0; j < 2024; j++) {
+			const unsigned int index = i * 2024 + j;
 			if (index >= message.size())
 				break;
 			versionDatagram.getData()->push_back(message.at(index));
@@ -350,7 +350,7 @@ bool MessageSender::synchronizeBroadcast(std::vector<unsigned char> &message,
 
 	unsigned short batchSize = BATCH_SIZE, sent = 0, acks = 0;
 	const double batchCount = static_cast<int>(ceil(static_cast<double>(totalDatagrams) / batchSize));
-	std::vector<unsigned char> buff = std::vector<unsigned char>(1048);
+	std::vector<unsigned char> buff = std::vector<unsigned char>(2048);
 	for (unsigned short batchStart = 0; batchStart < batchCount; batchStart++) {
 		unsigned short batchIndex, batchAck = 0;
 		if (sent == totalDatagrams) {
@@ -544,7 +544,7 @@ bool MessageSender::verifyBatchAckedFaulty(
 }
 
 unsigned short MessageSender::calculateTotalDatagrams(unsigned int dataLength) {
-	const double result = static_cast<double>(dataLength) / 1024;
+	const double result = static_cast<double>(dataLength) / 2024;
 	return static_cast<int>(ceil(result));
 }
 
@@ -553,7 +553,7 @@ bool MessageSender::synchronizeAckAttempts(sockaddr_in &destin, Datagram *datagr
 	Flags flags;
 	flags.SYN = true;
 	Protocol::setFlags(datagram, &flags);
-	auto buff = std::vector<unsigned char>(1048);
+	auto buff = std::vector<unsigned char>(2048);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
 		bool sent = Protocol::sendDatagram(datagram, &destin, broadcastFD, &flags);
@@ -582,7 +582,7 @@ bool MessageSender::ackAttempts(sockaddr_in &destin, Datagram *datagram) {
 	Flags flags;
 	flags.SYN = true;
 	Protocol::setFlags(datagram, &flags);
-	auto buff = std::vector<unsigned char>(1048);
+	auto buff = std::vector<unsigned char>(2048);
 
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
 		bool sent = Protocol::sendDatagram(datagram, &destin, socketFD, &flags);
@@ -614,7 +614,7 @@ bool MessageSender::broadcastAckAttempts(sockaddr_in &destin, Datagram *datagram
 	Flags flags;
 	flags.SYN = true;
 	Protocol::setFlags(datagram, &flags);
-	auto buff = std::vector<unsigned char>(1048);
+	auto buff = std::vector<unsigned char>(2048);
 	bool acked = true;
 	for (int i = 0; i < RETRY_ACK_ATTEMPT; ++i) {
 		for (auto [_, ack] : *members) {

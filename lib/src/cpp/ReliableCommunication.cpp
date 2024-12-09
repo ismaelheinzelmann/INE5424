@@ -135,7 +135,7 @@ void ReliableCommunication::processDatagram() {
 	while (true) {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
-		auto buffer = std::vector<unsigned char>(1048);
+		auto buffer = std::vector<unsigned char>(2048);
 		if (!Protocol::readDatagramSocket(&datagram, socketInfo, &senderAddr, &buffer, faults.first, faults.second)) {
 			continue;
 		}
@@ -159,7 +159,7 @@ void ReliableCommunication::processBroadcastDatagram() {
 	while (true) {
 		auto datagram = Datagram();
 		auto senderAddr = sockaddr_in{};
-		auto buffer = std::vector<unsigned char>(1048);
+		auto buffer = std::vector<unsigned char>(2048);
 		if (!Protocol::readDatagramSocket(&datagram, broadcastInfo, &senderAddr, &buffer, faults.first,
 										  faults.second)) {
 			continue;

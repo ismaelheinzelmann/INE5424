@@ -53,3 +53,11 @@ The full list of Log levels is:
 - ERROR
 - FATAL
 
+Test
+
+A test file is available that sends messages for 1 minute, it can be executed using:
+```
+make test && cd client/build/bin && ./test <node_id>
+```
+
+

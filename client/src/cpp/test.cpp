@@ -37,7 +37,7 @@ void print(ReliableCommunication &rb)
 		{
 			std::lock_guard guard(g_lock);
 			std::string str(receivedMessage.second.begin(), receivedMessage.second.end());
-			Logger::log("Message of "+std::to_string(receivedMessage.second.size()) + " bytes received.", LogLevel::INFO);
+			Logger::log("Message of "+std::to_string(receivedMessage.second.size()) + " bytes received.", LogLevel::DEBUG);
 		}
 	}
 }
@@ -60,39 +60,28 @@ int main(int argc, char *argv[])
 	while (g_running)
 	{
 		std::string type;
-		std::cout << "Type 0 to close program or 1 to send 1GB in messages:" << std::endl;
+		std::cout << "Type 0 to close program or 1 to send messages for 1 minute:" << std::endl;
 		std::cin >> type;
 		if (type == "1") {
-			int size = 0;
-			auto data = std::vector<std::vector<unsigned char>>();
-			while (size < GB) {
-				auto randomVector = generateRandomBytes(30*KB);
-				size+=MB;
-				data.push_back(randomVector);
-			}
-			int sent = 0, percentage = 0;
+			auto size = 50*KB;
+			auto goal = 60;
+			auto message = generateRandomBytes(size);
+			int sent = 0, elapsed = 0;
 			auto start = std::chrono::high_resolution_clock::now();
-			for (auto message : data) {
-				bool success = false;
-				while (!success) {
-					if (!rb.sendBroadcast(message)) {
-						Logger::log("Failed to send message, retrying...", LogLevel::INFO);
-					} else {
-						success = true;
-						sent++;
-						if (static_cast<int>(sent * 100 / data.size()) != percentage) {
-							percentage = sent * 100 / data.size();
-							Logger::log("Message progress is now " + std::to_string(percentage) + "%", LogLevel::INFO);
-						}
+			while (std::chrono::high_resolution_clock::now() - start < std::chrono::seconds(goal)) {
+				if (!rb.sendBroadcast(message)) {
+					Logger::log("Failed to send message, retrying...", LogLevel::INFO);
+				} else {
+					sent += size;
+					int currentElapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count();
 
+					if (currentElapsed != elapsed) {
+						elapsed = currentElapsed;
+						Logger::log("Elapsed time is " + std::to_string(elapsed) + " seconds", LogLevel::INFO);
+						Logger::log("Output in bytes is " + std::to_string(sent), LogLevel::INFO);
 					}
 				}
 			}
-
-			auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start);
-			Logger::log("Execution time is " + std::to_string(duration.count())+" seconds.", LogLevel::INFO);
-
-
 		}
 		else if (type == "0") {
 			std::cout << "Invalid type." << std::endl;

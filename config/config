@@ -5,4 +5,4 @@ nodes = {
 };
 broadcast = AB;
 alive = 500;
-faults = {{drop = 1}, {corrupt = 1}};
+faults = {{drop = 0}, {corrupt = 0}};

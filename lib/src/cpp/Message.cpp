@@ -5,7 +5,7 @@
 Message::Message(unsigned short totalDatagrams) {
 	lastUpdate = std::chrono::system_clock::now();
 	this->totalDatagrams = totalDatagrams;
-	data = new std::vector<unsigned char>(totalDatagrams * 1024);
+	data = new std::vector<unsigned char>(totalDatagrams * 2024);
 	for (int i = 1; i < totalDatagrams + 1; ++i) {
 		versions[i] = false;
 	}
@@ -40,11 +40,11 @@ bool Message::addData(Datagram *datagram) {
 		return true;
 	if (versions[datagram->getVersion()])
 		return false;
-	std::ranges::copy(*datagram->getData(), data->begin() + (datagram->getVersion() - 1) * 1024);
+	std::ranges::copy(*datagram->getData(), data->begin() + (datagram->getVersion() - 1) * 2024);
 	versions[datagram->getVersion()] = true;
 	if (datagram->getVersion() == totalDatagrams) {
-		if (datagram->getData()->size() < 1024) {
-			data->resize((totalDatagrams - 1) * 1024 + datagram->getData()->size());
+		if (datagram->getData()->size() < 2024) {
+			data->resize((totalDatagrams - 1) * 2024 + datagram->getData()->size());
 		}
 	}
 	lastUpdate = std::chrono::system_clock::now();
